@@ -200,20 +200,25 @@ def main():
                 if not f.endswith('README.md'):
                     modified.add(f)
         for f in sorted(modified):
-            # 检查修改是否"仅限链接行"（重命名其他文件后的必要连带修改）
-            diff = subprocess.run(
-                ['git', 'diff', 'HEAD', '--', f],
-                cwd=VAULT, capture_output=True, text=True, timeout=10).stdout
+            # 只检查**创建之后**的修改。git log -p 会把首次提交的每一行
+            # 都算作 '+'，所以必须跳过创建那次提交。
+            log = subprocess.run(
+                ['git', 'log', '--format=%H', '--', f],
+                cwd=VAULT, capture_output=True, text=True, timeout=10).stdout.split()
+            diff = ""
+            if len(log) > 1:
+                diff = subprocess.run(
+                    ['git', 'log', '-p', f'{log[1]}..HEAD', '--', f],
+                    cwd=VAULT, capture_output=True, text=True, timeout=10).stdout
             changed = [l[1:].strip() for l in diff.splitlines()
                        if l.startswith(('+', '-')) and not l.startswith(('+++', '---'))]
             only_links = bool(changed) and all(
                 l.startswith('- [[') or l.startswith('+ [[') for l in changed)
             if only_links:
                 print(f"  ℹ️  {f}  仅链接行变更（重命名的连带修改，合法）")
-            else:
+            elif changed:
                 problems['Sources 被修改'].append(
-                    f"{f}  内容被修改 —— 契约要求 10-Sources/ 只增不改"
-                    + ("（只有链接行可豁免）" if only_links else ""))
+                    f"{f}  内容被修改 —— 契约要求 10-Sources/ 只增不改")
     except Exception:
         pass
 

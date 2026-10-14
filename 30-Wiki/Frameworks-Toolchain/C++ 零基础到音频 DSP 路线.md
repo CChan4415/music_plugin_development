@@ -64,6 +64,7 @@ updated: 2026-10-14
 **学什么**：编译运行流程（源码 → 目标文件 → 可执行文件）；基本类型 `int`/`float`/`double`/`bool`；函数（声明、定义、参数、返回值）；`std::vector<float>`；引用 `&` 与 `const`；类的最基本用法（成员变量 + 成员函数 + 构造函数）；`#include` 与头文件的作用。
 
 ```cpp
+#include <algorithm>
 #include <iostream>
 #include <vector>
 
@@ -71,11 +72,8 @@ updated: 2026-10-14
 float peakLevel (const std::vector<float>& buffer)
 {
     float peak = 0.0f;
-    for (float x : buffer)                      // 范围 for：对 buffer 里每个 x
-    {
-        const float mag = (x < 0.0f) ? -x : x;  // 取绝对值
-        if (mag > peak) peak = mag;
-    }
+    for (float x : buffer)                          // 范围 for
+        peak = std::max (peak, (x < 0.0f) ? -x : x);
     return peak;
 }
 
@@ -84,6 +82,7 @@ int main()
     std::vector<float> buf { 0.1f, -0.8f, 0.3f };
     std::cout << "peak = " << peakLevel (buf) << "\n";
 }
+```
 ```
 
 **产出**：上面这种程序，你能自己从零写出来并解释每一行。
@@ -145,9 +144,8 @@ public:
 
     float readDelayed (int delaySamples) const  // 0 = 最近写入的那个
     {
-        const int n = (int) buffer.size();
         int idx = writePos - 1 - delaySamples;
-        while (idx < 0) idx += n;   // ⚠️ C++ 的 % 对负数返回负值，不能直接取模
+        while (idx < 0) idx += (int) buffer.size();   // ⚠️ % 对负数返回负值
         return buffer[(size_t) idx];
     }
 
@@ -155,6 +153,7 @@ private:
     std::vector<float> buffer;      // 容量在 prepare 时定死，之后不变
     int writePos = 0;
 };
+```
 ```
 
 **怎么验证**：① 往 8 格缓冲区写 1..20，读 `readDelayed(3)` 应为 17，手算对照；② 故意写 `readDelayed(100)`（超容量），看它会不会崩——**理解为什么它不一定崩，比让它崩更重要**；③ 用 `-fsanitize=address` 重编译再跑，看越界有没有被抓到，见 [[AddressSanitizer]]。
@@ -189,15 +188,31 @@ static uint32_t readLE (std::ifstream& f, int n)
     return v;
 }
 
+// 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部
+std::vector<float> readDataChunk (std::ifstream& f, uint32_t size, uint16_t bits)
+{
+    std::vector<float> out (size / (bits / 8));
+    for (size_t i = 0; i < out.size(); ++i)
+    {
+        if (bits == 16)                     // int16 → float：除以 32768 → [-1, 1)
+            out[i] = (float) (int16_t) readLE (f, 2) / 32768.0f;
+        else if (bits == 32)                // 32-bit float：位模式即 IEEE-754
+        {
+            const uint32_t b = readLE (f, 4);
+            std::memcpy (&out[i], &b, 4);
+        }
+    }
+    return out;
+}
+
+// 遍历 chunk：不要假设只有 fmt 和 data，也不要用固定偏移量硬跳
 WavData loadWav (const std::string& path)
 {
     std::ifstream f (path, std::ios::binary);   // ⚠️ 永远加 binary
     WavData out;
-    char tag4[4];
-    f.read (tag4, 4); readLE (f, 4);            // "RIFF" + 文件长度（用不上）
-    f.read (tag4, 4);                           // "WAVE"
+    f.seekg (12);                               // 跳过 RIFF/size/WAVE
 
-    while (f)                                   // 逐个 chunk 走，别假设顺序
+    while (f)
     {
         char id[4];
         if (! f.read (id, 4)) break;
@@ -214,24 +229,14 @@ WavData loadWav (const std::string& path)
             out.bitsPerSample = (uint16_t) readLE (f, 2);
         }
         else if (tag == "data")
-        {
-            out.samples.resize (size / (out.bitsPerSample / 8));
-            for (size_t i = 0; i < out.samples.size(); ++i)
-            {
-                if (out.bitsPerSample == 16)    // int16 → float：除以 32768
-                    out.samples[i] = (float) (int16_t) readLE (f, 2) / 32768.0f;
-                else if (out.bitsPerSample == 32)   // 位模式即 IEEE-754
-                {
-                    const uint32_t bits = readLE (f, 4);
-                    std::memcpy (&out.samples[i], &bits, 4);
-                }
-            }
-        }
+            out.samples = readDataChunk (f, size, out.bitsPerSample);
+
         // 跳到 chunk 末尾；size 为奇数时有一个补齐字节，这是 WAV 的硬规定
         f.seekg (chunkStart + (std::streamoff) size + (std::streamoff) (size & 1));
     }
     return out;
 }
+```
 ```
 
 **产出**：一个命令行程序 `gain in.wav out.wav -6`，把音量降低 6 dB 并写出新文件。
@@ -244,6 +249,7 @@ int16_t toPcm16 (float x)
     x = std::clamp (x, -1.0f, 1.0f);        // ⚠️ 不钳制就会整数回绕 → 爆音
     return (int16_t) std::lround (x * 32767.0f);
 }
+```
 ```
 
 **怎么验证**：用 Python 对照读两个文件，确认峰值比正好是 -6 dB。
@@ -296,7 +302,6 @@ public:
         a = 1.0f - std::exp (-2.0f * 3.14159265f * cutoffHz / sampleRate);
     }
     float process (float x) { y += a * (x - y); return y; }   // 一次乘加，极省 CPU
-
 private:
     float a = 0.0f, y = 0.0f;
 };
@@ -307,10 +312,10 @@ float readFractional (const RingBuffer& rb, float delaySamples)
 {
     const int   i0   = (int) delaySamples;
     const float frac = delaySamples - (float) i0;
-    const float a = rb.readDelayed (i0);        // 整数部分
-    const float b = rb.readDelayed (i0 + 1);    // 下一个采样
+    const float a = rb.readDelayed (i0), b = rb.readDelayed (i0 + 1);
     return a + frac * (b - a);                  // 线性插值
 }
+```
 ```
 
 > [!important] 从阶段 3 开始，参数必须平滑
@@ -339,34 +344,31 @@ float readFractional (const RingBuffer& rb, float delaySamples)
 class MyFirstProcessor : public juce::AudioProcessor
 {
 public:
-    MyFirstProcessor()
-        : juce::AudioProcessor (BusesProperties()
-              .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-              .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+    MyFirstProcessor() : juce::AudioProcessor (BusesProperties()
+          .withInput ("In", juce::AudioChannelSet::stereo(), true)
+          .withOutput ("Out", juce::AudioChannelSet::stereo(), true))
     {
-        // 构造函数里只做轻活：宿主扫描插件时会构造它，重活会拖慢扫描
+        // 构造函数只做轻活：宿主扫描插件时会构造它
         addParameter (gainDb = new juce::AudioParameterFloat (
             juce::ParameterID { "gain", 1 }, "Gain", -24.0f, 24.0f, 0.0f));
     }
 
-    // 宿主会反复调用它（改采样率、改 buffer size），必须幂等
+    // 宿主会反复调用（改采样率、改 buffer size），必须幂等
     void prepareToPlay (double sampleRate, int) override
     {
-        smoothedGain.reset (sampleRate, 0.02);      // 20 ms 平滑
+        smoothedGain.reset (sampleRate, 0.02);          // 20 ms 平滑
         smoothedGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (gainDb->get()));
     }
 
-    void releaseResources() override {}
-
     void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
     {
-        const int numSamples = buffer.getNumSamples();
-        if (numSamples == 0) return;                // ⚠️ 合法情况，别漏
+        const int n = buffer.getNumSamples();
+        if (n == 0) return;                             // ⚠️ 合法情况，别漏
         smoothedGain.setTargetValue (juce::Decibels::decibelsToGain (gainDb->get()));
 
-        for (int i = 0; i < numSamples; ++i)
+        for (int i = 0; i < n; ++i)
         {
-            const float g = smoothedGain.getNextValue();   // 每采样只推进一次
+            const float g = smoothedGain.getNextValue();  // 每采样只推进一次
             for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
                 buffer.getWritePointer (ch)[i] *= g;
         }
@@ -376,6 +378,7 @@ private:
     juce::AudioParameterFloat* gainDb = nullptr;
     juce::SmoothedValue<float> smoothedGain;
 };
+```
 ```
 
 > [!warning] 这段代码里有两个新手必踩的坑

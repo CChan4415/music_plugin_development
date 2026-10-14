@@ -78,7 +78,7 @@ float peakLevel (const std::vector<float>& buffer)
 > **什么时候再碰**：模板与智能指针在阶段 4 读 JUCE 源码时被动遇到；移动语义在阶段 3 之后关心拷贝开销时；并发与原子操作配合 [[SPSC 队列]] 学；其余长期不用。
 > **判据**：如果一个特性在"读一段音频处理代码"时不会挡路，就推迟它。
 
-**耗时与卡点**：15–25 小时；超过 35 小时还在原地，说明你在啃上面那张"暂时跳过"表——**回去写代码**。装不上编译器 → 用 Xcode Command Line Tools 就够，见 [[MOC - Frameworks & Toolchain]]；分不清 `.h` 和 `.cpp` → 先记住"声明放头文件、定义放源文件"；`#include <>` 与 `#include ""` 的区别 → 尖括号找系统路径，引号先找当前目录。
+**耗时与卡点**：15–25 小时；超过 35 小时还在原地，说明你在啃上面那张"暂时跳过"表——**回去写代码**。装不上编译器 → Xcode Command Line Tools 就够，见 [[MOC - Frameworks & Toolchain]]；分不清 `.h` 和 `.cpp` → 记住"声明放头文件、定义放源文件"；`#include <>` 找系统路径，`#include ""` 先找当前目录。
 
 ## 阶段 1：指针与内存（C++ 的真正门槛）
 
@@ -124,13 +124,12 @@ private:
 > 这一声比后面任何阶段都重要——它是你坚持下去的燃料。
 
 **目标**：不借助任何音频库，手写 WAV 解析与写入。**为什么不用库**：因为你需要知道"音频数据到底是什么"——一个 16-bit 立体声 WAV，剥掉头部之后**就是一串交错的整数**。这个认识一旦建立，后面所有 DSP 都只是"对这串数字做运算"。
-**学什么**：RIFF / WAVE 容器结构（`RIFF` 头 + 一串 chunk：`fmt `、`data`，可能还有 `LIST`/`fact`）；**小端（little-endian）**字节序；位深（bit depth）与 `[-1, 1]` 浮点的映射；交错（interleaved）存储 `L R L R ...`；浮点转 `int16` 前**必须钳制**。
+**学什么**：RIFF / WAVE 结构（`RIFF` 头 + 一串 chunk：`fmt `、`data`，可能还有 `LIST`）；**小端（little-endian）**字节序；位深与 `[-1, 1]` 浮点的映射；交错（interleaved）存储 `L R L R ...`；浮点转 `int16` 前**必须钳制**。
 
 ```cpp
 struct WavData { std::vector<float> samples; uint32_t sampleRate = 0;
                  uint16_t numChannels = 0, bitsPerSample = 0; };
-
-// 逐字节读最稳 —— 直接 read 进结构体会被编译器插入的 padding 搞错字段位置
+// 逐字节读最稳：直接 read 进结构体会被 padding 搞错字段位置
 static uint32_t readLE (std::ifstream& f, int n)   // 读 n 字节，按小端拼成整数
 {
     unsigned char b[4] = { 0, 0, 0, 0 };
@@ -139,7 +138,6 @@ static uint32_t readLE (std::ifstream& f, int n)   // 读 n 字节，按小端�
     for (int i = 0; i < n; ++i) v |= (uint32_t) b[i] << (8 * i);
     return v;
 }
-
 // 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部
 WavData loadWav (const std::string& path)
 {
@@ -153,7 +151,6 @@ WavData loadWav (const std::string& path)
         const uint32_t size = readLE (f, 4);
         const auto chunkStart = f.tellg();      // 记下数据起点
         const std::string tag (id, 4);
-
         if (tag == "fmt ")   // format(2) ch(2) rate(4) byteRate(4) align(2) bits(2)
         {   readLE (f, 2);
             out.numChannels = (uint16_t) readLE (f, 2); out.sampleRate = readLE (f, 4);
@@ -165,7 +162,7 @@ WavData loadWav (const std::string& path)
                     x = (float) (int16_t) readLE (f, 2) / 32768.0f;
                 else                           // 32-bit float：位模式即 IEEE-754
                 { const uint32_t b = readLE (f, 4); std::memcpy (&x, &b, 4); } }
-        // 跳到 chunk 末尾；size 为奇数时有一个补齐字节，这是 WAV 的硬规定
+        // 跳到 chunk 末尾；size 为奇数时有一个补齐字节（WAV 硬规定）
         f.seekg (chunkStart + (std::streamoff) size + (std::streamoff) (size & 1));
     }
     return out;
@@ -175,7 +172,6 @@ WavData loadWav (const std::string& path)
 **产出**：一个命令行程序 `gain in.wav out.wav -6`，把音量降低 6 dB 并写出新文件。
 
 ```cpp
-pp
 float dbToGain (float dB) { return std::pow (10.0f, dB / 20.0f); }
 int16_t toPcm16 (float x)
 {
@@ -220,7 +216,6 @@ assert abs(ratio_db + 6.0) < 0.1, "增益不对，或钳制出问题了"
 | 5 | 延迟线 | 环形缓冲区 + 分数延迟插值 | 脉冲进、延迟后脉冲出 |
 
 ```cpp
-pp
 // 一阶低通：y[n] = y[n-1] + a · (x[n] - y[n-1])，a = 1 - exp(-2π·fc/fs)
 class OnePole
 {
@@ -250,7 +245,7 @@ float readFractional (const RingBuffer& rb, float d)          // 见 [[插值]]
 > [!tip] 让 AI 写验证脚本，不要让它写 DSP
 > 这三类测试的 Python 脚本非常适合交给 Agent 生成。但 DSP 本身必须你自己写——**否则你不会有"这个数不对"的直觉**。
 
-**耗时与卡点**：30–50 小时，**全程最长**，也是收益最持久的阶段。滤波器"爆炸"（输出变 `inf`/`nan`）→ 系数没归一化、符号约定抄错、参数没钳制，见 [[Biquad 滤波器]]；静音时 CPU 飙升 → denormal 数，见 [[denormal 数处理]]；立体声串音 → 两声道共用了一组滤波器状态，**一个声道一个实例**；扫频有阶梯感 → 系数每 block 才更新一次，见 [[窗函数]]。
+**耗时与卡点**：30–50 小时，**全程最长**，也是收益最持久的阶段。滤波器"爆炸"（输出变 `inf`/`nan`）→ 系数没归一化、符号约定抄错、参数没钳制，见 [[Biquad 滤波器]]；静音时 CPU 飙升 → denormal 数，见 [[denormal 数处理]]；立体声串音 → **一个声道一个滤波器实例**；扫频有阶梯感 → 系数每 block 才更新一次，见 [[窗函数]]。
 
 ## 阶段 4：进入 JUCE
 
@@ -268,11 +263,9 @@ public:
           .withOutput ("Out", juce::AudioChannelSet::stereo(), true))
     {   addParameter (gainDb = new juce::AudioParameterFloat (
             juce::ParameterID { "gain", 1 }, "Gain", -24.0f, 24.0f, 0.0f)); }
-
     void prepareToPlay (double sampleRate, int) override   // 会被反复调用，必须幂等
     {   smoothedGain.reset (sampleRate, 0.02);             // 20 ms 平滑
         smoothedGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (gainDb->get())); }
-
     void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
     {
         const int n = buffer.getNumSamples();
@@ -438,12 +431,12 @@ private:
 - [[从音乐制作人到插件开发者]] — 你的知识盘点与缺口地图，本页是它的执行版
 - [[_meta/roadmap]] — 项目级路线图（本页是**学习**路线，那一页是**项目**路线）
 - [[MOC - Frameworks & Toolchain]] · [[MOC - DSP]] · [[MOC - Realtime Engineering]] · [[MOC - UI & UX]]
-- [[实时音频线程契约]] · [[参数平滑 parameter smoothing]] · [[Biquad 滤波器]] · [[denormal 数处理]] · [[音频缓冲区 buffer 与 block size]]
-- [[插件格式对比]] · [[ADR-002 选择框架]] · [[AI 辅助 C++ 音频开发的真实效果]]
+- [[实时音频线程契约]] · [[参数平滑 parameter smoothing]] · [[Biquad 滤波器]] · [[denormal 数处理]]
+- [[音频缓冲区 buffer 与 block size]] · [[插件格式对比]] · [[ADR-002 选择框架]] · [[AI 辅助 C++ 音频开发的真实效果]]
 
 > [!note] 待补充
 > - **时间估算的实测校准**：本页所有小时数是判断而非测量。等你走完阶段 0–2，把实际耗时填回来，这张表才有资格从 `seed` 升到 `solid`
-> - **阶段 1 是否真的需要独立成阶段**：对计算机专业背景的人，指针/内存可能 3 小时就通了。如果实测如此，应该和阶段 0 合并
-> - **是否该在阶段 2 和 3 之间加一个"Python 原型"阶段**：先用 numpy 把 DSP 写一遍再移植到 C++，可能更快建立直觉；但这会稀释"用 C++ 做事"的训练量，取舍未定
-> - **CMake 应该在哪一阶段引入**：本页推到阶段 4，但阶段 2 就手写 `clang++ a.cpp b.cpp -o out` 在多文件时会很痛苦。哪个更优未验证
-> - **AI 辅助学习的具体提示词模板**：本页只给了分工原则，没给可复用的提示词。应在实践中积累出一套，见 [[Agent 驱动的插件开发工作流]]
+> - **阶段 1 是否该独立成阶段**：对计算机专业背景的人，指针/内存可能 3 小时就通了；若实测如此，应与阶段 0 合并
+> - **是否该在阶段 2 和 3 之间加"Python 原型"阶段**：先用 numpy 写一遍 DSP 再移植到 C++，可能更快建立直觉；但会稀释"用 C++ 做事"的训练量，取舍未定
+> - **CMake 该在哪一阶段引入**：本页推到阶段 4，但阶段 2 手写 `clang++ a.cpp b.cpp -o out` 在多文件时很痛苦。哪个更优未验证
+> - **AI 辅助学习的提示词模板**：本页只给了分工原则，没给可复用的提示词；应在实践中积累一套，见 [[Agent 驱动的插件开发工作流]]

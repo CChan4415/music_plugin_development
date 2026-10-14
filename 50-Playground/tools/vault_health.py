@@ -25,6 +25,17 @@ WIKI_TYPES = {'wiki', 'note', 'source', 'decision', 'project', 'experiment'}
 STALE_DAYS = 120
 
 LINK_RE = re.compile(r'\[\[([^\]\|#]+)(?:[#\|][^\]]*)?\]\]')
+FENCE_RE = re.compile(r'```.*?```', re.S)          # 围栏代码块
+INLINE_CODE_RE = re.compile(r'`[^`\n]*`')          # 行内代码
+
+
+def strip_code(text):
+    """去掉代码块和行内代码。
+
+    Obsidian 不会把代码里的 [[...]] 渲染成链接，所以它们不该被 lint 报告。
+    典型场景：记录一个 gotcha 时需要**展示反例**（`[[A/B 对比]]`）。
+    """
+    return INLINE_CODE_RE.sub('', FENCE_RE.sub('', text))
 FM_RE = re.compile(r'^---\s*\n(.*?)\n---\s*\n', re.S)
 
 
@@ -69,7 +80,7 @@ def main():
     for rel, d in docs.items():
         if rel.parts[0] in ('99-Templates',):
             continue                      # 模板里的链接是占位符
-        for raw in LINK_RE.findall(d['text']):
+        for raw in LINK_RE.findall(strip_code(d['text'])):
             target = raw.strip()
             if target.endswith('.md'):
                 target = target[:-3]

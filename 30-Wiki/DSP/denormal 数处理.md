@@ -21,7 +21,7 @@ updated: 2026-10-14
 
 ## 一、什么是 denormal
 
-32-bit float 的位：`s eeeeeeee fffffffffffffffffffffff`（符号 1 位 / 指数 8 位偏置 127 / 尾数 23 位）
+32-bit float 的位：`s eeeeeeee fffffffffffffffffffffff`（符号 1 / 指数 8 位偏置 127 / 尾数 23）
 
 - **normal**：指数位不全为 0，隐含前导 1 → $(-1)^s \times 1.f \times 2^{e-127}$
 - **denormal**：**指数位全为 0**，隐含前导变成 **0**，指数固定最小值 → $(-1)^s \times 0.f \times 2^{-126}$
@@ -126,11 +126,9 @@ $$\boxed{t_{\text{denormal}} \approx \frac{758.6}{60} \times \mathrm{RT60} \appr
 ### 方案 1：加极小直流偏置
 
 ```cpp
-class CombFilter
-{
+class CombFilter {
 public:
-    float process (float x) noexcept
-    {
+    float process (float x) noexcept {
         const float y = buffer[index];
         //                              ↓ 这就是防 denormal 偏置
         buffer[index] = x + y * feedback + kAntiDenormal;
@@ -138,8 +136,8 @@ public:
         return y;
     }
 private:
-    static constexpr float kAntiDenormal = 1.0e-20f;   // 远大于 FLT_MIN，远小于音频
-    static constexpr int   kSize = 1117;               // 互质延迟，见 [[混响的原理]]
+    static constexpr float kAntiDenormal = 1.0e-20f;  // 远大于 FLT_MIN，远小于音频
+    static constexpr int   kSize = 1117;              // 互质延迟，见 [[混响的原理]]
     float buffer[kSize] {};
     int   index = 0;
     float feedback = 0.95f;
@@ -149,15 +147,8 @@ private:
 `1e-20` 比 `FLT_MIN` 大 $10^{18}$ 倍，比 24-bit LSB（$1.19\times10^{-7}$）小 $10^{13}$ 倍——两头都留足余量。
 
 > [!warning] 代价：偏置会在反馈环里被放大成 DC
-> 稳态直流增益是 $1/(1-g)$。实测（g=0.95，50 ms 延迟）：
->
-> | 偏置 | 稳态 DC | 折合 dBFS |
-> |---|---|---|
-> | `1e-20` | 2.0e-19 | -374.0 dB |
-> | `1e-15` | 2.0e-14 | -274.0 dB |
-> | `1e-8` | 2.0e-7 | **-134.0 dB** ⚠️ |
->
-> `1e-20` 放大 20 倍后是 -374 dBFS，完全无害。但**图省事写 `1e-8`，得到 -134 dBFS 的直流**——已接近 24-bit 噪声底（-138.5 dBFS）。**偏置值不是"随便取个小数"。**
+> 稳态直流增益是 $1/(1-g)$。实测（g=0.95，50 ms 延迟）：偏置 `1e-20` → 稳态 DC 2.0e-19（**-374 dBFS**）；`1e-15` → -274 dBFS；`1e-8` → 2.0e-7（**-134 dBFS** ⚠️）。
+> `1e-20` 完全无害，但**图省事写 `1e-8` 会得到 -134 dBFS 的直流**——已接近 24-bit 噪声底（-138.5 dBFS）。**偏置值不是"随便取个小数"。**
 
 **优点**：一行、无分支、不会漏、对 SIMD 友好。**缺点**：引入 DC；每个反馈环都要记得加。
 
@@ -167,22 +158,19 @@ private:
 #include <cmath>
 
 inline float flushDenormal (float x) noexcept
-{
-    return (std::abs (x) < 1.0e-30f) ? 0.0f : x;
-}
+{ return (std::abs (x) < 1.0e-30f) ? 0.0f : x; }
 
 // 用在反馈状态上（⚠️ 只清状态变量，不清输出 —— 清输出会在尾音里产生"台阶"）
-float y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+float y = b0*x + b1*x1 + b2*x2 - a1*y1 - a2*y2;
 y1 = flushDenormal (y);
 y2 = flushDenormal (y1);
 
 // 无分支版本：利用"denormal 的指数位全为 0"
 #include <cstring>
-inline float flushDenormalBits (float x) noexcept
-{
+inline float flushDenormalBits (float x) noexcept {
     std::uint32_t bits;
     std::memcpy (&bits, &x, sizeof (bits));
-    // 指数位非零 → normal / 0 / Inf / NaN → 原样返回；全零 → denormal → 0
+    // 指数位非零 → normal/0/Inf/NaN → 原样返回；全零 → denormal → 0
     return (bits & 0x7f800000u) ? x : 0.0f;
 }
 ```
@@ -257,8 +245,7 @@ inline float flushDenormalBits (float x) noexcept
 #endif
 
 // RAII：进入作用域开启，离开时**恢复原值**（不是关掉）
-class ScopedNoDenormals
-{
+class ScopedNoDenormals {
 public:
     ScopedNoDenormals() noexcept : saved (fpGet()) { fpSet (saved | denormalMask()); }
     ~ScopedNoDenormals() noexcept { fpSet (saved); }
@@ -267,10 +254,10 @@ public:
 private:
     FpControl saved;
 };
-
-// 用法：processBlock 的第一行
-//     const ScopedNoDenormals noDenormals;
+// 用法：processBlock 第一行 → const ScopedNoDenormals noDenormals;
 ```
+
+**优点**：零运行时代价、覆盖整个 block、真正的"根治"。**缺点**：平台相关代码；必须恢复原值。
 
 > [!warning] 必须"恢复原值"，不能"关掉"
 > `MXCSR` / `FPCR` 是**每线程**的寄存器状态，而音频线程可能被宿主复用。**改了不恢复，会影响同线程上跑的其他代码**（包括宿主自己的）。RAII 保存/恢复是唯一安全的做法。
@@ -292,8 +279,7 @@ private:
 
 ```cpp
 // 自检：开启后，一个 denormal 运算应该返回 0
-static bool verifyFlushToZeroWorks() noexcept
-{
+static bool verifyFlushToZeroWorks() noexcept {
     ScopedNoDenormals guard;
     const volatile float tiny = 1.0e-40f;      // volatile 防常量折叠
     return (tiny * 1.0f) == 0.0f;
@@ -317,8 +303,7 @@ static bool verifyFlushToZeroWorks() noexcept
 
 ```cpp
 // 调试期：统计（不要用 assert，会刷屏）
-inline float checkDenormal (float y) noexcept
-{
+inline float checkDenormal (float y) noexcept {
    #ifndef NDEBUG
     static std::uint64_t count = 0;
     if (y != 0.0f && std::abs (y) < FLT_MIN && (++count % 100000 == 1))
@@ -329,10 +314,9 @@ inline float checkDenormal (float y) noexcept
 }
 
 // 最实用的检测器：利用第三节第 3 条的实测现象
-bool isTailTrulySilent (const float* buffer, int size) noexcept
-{
+bool isTailTrulySilent (const float* buffer, int size) noexcept {
     for (int i = 0; i < size; ++i)
-        if (buffer[i] != 0.0f) return false;    // 有非零值 = 有 denormal 在循环
+        if (buffer[i] != 0.0f) return false;   // 有非零值 = 有 denormal 在循环
     return true;
 }
 ```
@@ -346,8 +330,7 @@ import numpy as np
 y = np.float32(1.0)
 for _ in range(100_000):
     y = np.float32(y * np.float32(0.9))
-    if y == np.float32(0.0):
-        break
+    if y == np.float32(0.0): break
 print("卡住的值:", y)      # → 5.605194e-45   ← 这就是 denormal
 ```
 

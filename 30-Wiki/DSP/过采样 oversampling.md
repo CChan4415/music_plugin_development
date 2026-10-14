@@ -412,11 +412,11 @@ private:
 
 ### 方式 2：手写多级半带滤波器
 
-核心只有三件事：**设计半带 FIR**、**插零升采样**、**低通后抽取**。
+核心只有三件事：**设计半带 FIR** → **插零升采样** → **低通后抽取**。
 
 ```cpp
-// 半带 FIR：窗函数法，截止 = fs/4（即当前采样率的奈奎斯特/2）
-// 性质：奇数长度、对称（线性相位）；除中心外偶数抽头全为 0 → 省一半乘法
+// ① 半带 FIR：窗函数法，截止 = fs/4。奇数长度、对称 → 线性相位；
+//    除中心外偶数抽头全为 0 → 可跳过一半乘法（半带高效的原因）
 static std::vector<float> designHalfBand (int taps)
 {
     std::vector<float> h ((size_t) taps);
@@ -425,9 +425,8 @@ static std::vector<float> designHalfBand (int taps)
     for (int i = 0; i < taps; ++i)
     {
         const double n = i - (taps - 1) / 2.0;
-        double v = (std::abs (n) < 1e-12)
-                     ? 2.0 * fc
-                     : std::sin (2.0 * M_PI * fc * n) / (M_PI * n);
+        double v = (std::abs (n) < 1e-12) ? 2.0 * fc
+                                          : std::sin (2.0 * M_PI * fc * n) / (M_PI * n);
         v *= 0.54 - 0.46 * std::cos (2.0 * M_PI * i / (taps - 1));   // Hamming
         h[(size_t) i] = (float) v;
         sum += v;
@@ -436,12 +435,11 @@ static std::vector<float> designHalfBand (int taps)
     return h;
 }
 
-// 线性相位 FIR（保留输入长度，**不补偿延迟** —— 实时插件必须如实保留它）
+// ② 线性相位 FIR。**不补偿延迟** —— 实时插件必须如实保留并报告它
 struct Fir
 {
     std::vector<float> h, z;
-    explicit Fir (std::vector<float> coeffs) : h (std::move (coeffs)), z (h.size(), 0.0f) {}
-
+    explicit Fir (std::vector<float> c) : h (std::move (c)), z (h.size(), 0.0f) {}
     float process (float x)
     {
         std::rotate (z.begin(), z.end() - 1, z.end());   // z[0] = 最新样本
@@ -453,29 +451,27 @@ struct Fir
     void reset() { std::fill (z.begin(), z.end(), 0.0f); }
 };
 
-// 2x 升采样：插零 + 抗镜像低通
+// ③ 2x 升采样：插零 + 抗镜像低通（×2 补偿插零造成的能量减半）
 struct Upsampler2x
 {
     Fir fir;
     explicit Upsampler2x (int taps) : fir (designHalfBand (taps)) {}
-
     void process (const float* in, int n, std::vector<float>& out)
     {
         out.resize ((size_t) n * 2);
         for (int i = 0; i < n; ++i)
         {
-            out[(size_t) (2 * i)]     = fir.process (2.0f * in[i]);  // ×2 补偿能量
+            out[(size_t) (2 * i)]     = fir.process (2.0f * in[i]);
             out[(size_t) (2 * i + 1)] = fir.process (0.0f);          // 插零
         }
     }
 };
 
-// 2x 降采样：抗混叠低通 + 抽取
+// ④ 2x 降采样：抗混叠低通 + 抽取
 struct Downsampler2x
 {
     Fir fir;
     explicit Downsampler2x (int taps) : fir (designHalfBand (taps)) {}
-
     void process (const float* in, int n, std::vector<float>& out)
     {
         out.resize ((size_t) n / 2);
@@ -486,24 +482,21 @@ struct Downsampler2x
         }
     }
 };
-```
 
-**串联成 4x**（两级 2x）：
-
-```cpp
+// ⑤ 串联成 4x —— 这就是第一节那张流图的代码形式
 Upsampler2x   up1 { 63 }, up2 { 63 };      // 1x→2x→4x
 Downsampler2x dn1 { 63 }, dn2 { 63 };      // 4x→2x→1x
 
 void process4x (const float* in, int n, float* out, float drive)
 {
     std::vector<float> a, b;
-    up1.process (in, n, a);                              // 1x → 2x
-    up2.process (a.data(), (int) a.size(), b);           // 2x → 4x
+    up1.process (in, n, a);                                    // 升采样
+    up2.process (a.data(), (int) a.size(), b);
 
-    for (auto& v : b) v = std::clamp (v * drive, -1.0f, 1.0f);   // ← 非线性
+    for (auto& v : b) v = std::clamp (v * drive, -1.0f, 1.0f);  // ← 唯一的非线性
 
-    dn1.process (b.data(), (int) b.size(), a);           // 4x → 2x
-    dn2.process (a.data(), (int) a.size(), b);           // 2x → 1x
+    dn1.process (b.data(), (int) b.size(), a);                  // 降采样
+    dn2.process (a.data(), (int) a.size(), b);
     std::copy (b.begin(), b.begin() + n, out);
 }
 ```
@@ -662,66 +655,19 @@ AI 可能说："过采样会削掉高频，所以声音会变闷。"
 
 ### 核心验证方法：喂高频正弦，看有没有**非谐波**成分
 
+复用 [[混叠 aliasing]] 第七节的脚本（`make_oversampler` + `at()`），
+只需改一行——把 `factor` 从 4 改成 `2 / 4 / 8 / 16` 循环：
+
 ```python
-#!/usr/bin/env python3
-"""验证过采样：倍率 vs 混叠抑制。需要 audio_io.py。"""
-import numpy as np
-from audio_io import sine, spectrum
-
-SR, F0, DRIVE = 48000, 5000.0, 3.0     # 5 kHz：谐波最容易越界
-
-
-def fir_lowpass (cutoff_hz, sr, taps):
-    n = np.arange(taps) - (taps - 1) / 2.0
-    W = cutoff_hz / sr
-    h = 2.0 * W * np.sinc(2.0 * W * n)
-    h *= np.hamming(taps)
-    return h / h.sum()
-
-
-def fir_apply (x, h, compensate=True):
-    y = np.convolve(x, h, mode='full')
-    d = (len(h) - 1) // 2
-    return y[d:d + len(x)] if compensate else y
-
-
-def make_oversampler (factor, taps=63, compensate=True):
-    stages = int(np.log2(factor))
-    h = fir_lowpass(SR / 2, SR * 2, taps)
-
-    def up2 (x):
-        u = np.zeros(len(x) * 2)
-        u[::2] = x * 2.0
-        return fir_apply(u, h, compensate)
-
-    def down2 (x):
-        return fir_apply(x, h, compensate)[::2]
-
-    def process (x, drive):
-        y = x
-        for _ in range(stages): y = up2(y)
-        y = np.clip(y * drive, -1.0, 1.0)
-        for _ in range(stages): y = down2(y)
-        return y
-
-    return process
-
-
-def at (y, hz):
-    f, mag = spectrum(y, SR)
-    return mag[np.argmin(np.abs(f - hz))]
-
-
-if __name__ == '__main__':
-    x = sine(F0, 0.5, SR, amp=0.9)
-    print(f"{'配置':>12} {'23kHz(混叠)':>13} {'5kHz(信号)':>12}")
-    print(f"{'不过采样':>12} {at(np.clip(x*DRIVE,-1,1), 23000):>10.1f} dB "
-          f"{at(np.clip(x*DRIVE,-1,1), 5000):>9.1f} dB")
-
-    for factor in (2, 4, 8, 16):
-        y = make_oversampler(factor)(x, DRIVE)[:len(x)]
-        print(f"{str(factor)+'x':>12} {at(y, 23000):>10.1f} dB {at(y, 5000):>9.1f} dB")
+for factor in (2, 4, 8, 16):
+    y = make_oversampler(factor, taps=63)(x, DRIVE)[:len(x)]
+    print(f"{factor}x  {at(y, 23000):7.1f} dB  (混叠)   {at(y, 5000):7.1f} dB  (信号)")
 ```
+
+> [!tip] 关键点：**同时看两列**
+> 一列是**混叠**（要降），一列是**信号**（不能变）。
+> 只看混叠那一列，你会以为"过采样越多越好"；
+> 只有两列一起看，才能发现"信号被削掉了"这类错误。
 
 **实测输出**：
 

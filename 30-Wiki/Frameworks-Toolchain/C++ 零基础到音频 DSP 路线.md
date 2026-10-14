@@ -124,7 +124,7 @@ private:
 > 这一声比后面任何阶段都重要——它是你坚持下去的燃料。
 
 **目标**：不借助任何音频库，手写 WAV 解析与写入。**为什么不用库**：因为你需要知道"音频数据到底是什么"——一个 16-bit 立体声 WAV，剥掉头部之后**就是一串交错的整数**。这个认识一旦建立，后面所有 DSP 都只是"对这串数字做运算"。
-**学什么**：RIFF / WAVE 容器结构（`RIFF` 头 + 一串 chunk：`fmt `、`data`，可能还有 `LIST`/`fact`）；**小端（little-endian）**字节序；位深（bit depth）与 `[-1, 1]` 浮点的映射；交错（interleaved）存储 `L R L R ...`；浮点转 `int16` 前**必须钳制**，否则整数回绕成巨大噪声。
+**学什么**：RIFF / WAVE 容器结构（`RIFF` 头 + 一串 chunk：`fmt `、`data`，可能还有 `LIST`/`fact`）；**小端（little-endian）**字节序；位深（bit depth）与 `[-1, 1]` 浮点的映射；交错（interleaved）存储 `L R L R ...`；浮点转 `int16` 前**必须钳制**。
 
 ```cpp
 struct WavData { std::vector<float> samples; uint32_t sampleRate = 0;
@@ -175,6 +175,7 @@ WavData loadWav (const std::string& path)
 **产出**：一个命令行程序 `gain in.wav out.wav -6`，把音量降低 6 dB 并写出新文件。
 
 ```cpp
+pp
 float dbToGain (float dB) { return std::pow (10.0f, dB / 20.0f); }
 int16_t toPcm16 (float x)
 {
@@ -219,6 +220,7 @@ assert abs(ratio_db + 6.0) < 0.1, "增益不对，或钳制出问题了"
 | 5 | 延迟线 | 环形缓冲区 + 分数延迟插值 | 脉冲进、延迟后脉冲出 |
 
 ```cpp
+pp
 // 一阶低通：y[n] = y[n-1] + a · (x[n] - y[n-1])，a = 1 - exp(-2π·fc/fs)
 class OnePole
 {
@@ -444,5 +446,4 @@ private:
 > - **阶段 1 是否真的需要独立成阶段**：对计算机专业背景的人，指针/内存可能 3 小时就通了。如果实测如此，应该和阶段 0 合并
 > - **是否该在阶段 2 和 3 之间加一个"Python 原型"阶段**：先用 numpy 把 DSP 写一遍再移植到 C++，可能更快建立直觉；但这会稀释"用 C++ 做事"的训练量，取舍未定
 > - **CMake 应该在哪一阶段引入**：本页推到阶段 4，但阶段 2 就手写 `clang++ a.cpp b.cpp -o out` 在多文件时会很痛苦。哪个更优未验证
-> - **阶段 5 之后的分支**：本页停在"能给别人用"。发布链路（签名、公证、打包）和进阶方向（AI 音频、物理建模）见 [[MOC - Craft & Release]] 与 [[MOC - AI Audio]]
 > - **AI 辅助学习的具体提示词模板**：本页只给了分工原则，没给可复用的提示词。应在实践中积累出一套，见 [[Agent 驱动的插件开发工作流]]

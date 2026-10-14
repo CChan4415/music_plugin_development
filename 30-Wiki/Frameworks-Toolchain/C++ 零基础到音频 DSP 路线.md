@@ -16,6 +16,7 @@ updated: 2026-10-14
 > **每个阶段都必须产出一个"能听到"或"能看到"的东西。**
 > 不存在"先打三个月基础"这种阶段——那种路线你已经知道自己会放弃。
 > 如果某个阶段结束时手上没有新东西可以听、可以看图、可以在 DAW 里加载，这个阶段的设计就是错的。
+
 **本页不从"什么是变量"讲起。** 它假设你已经有变量/循环/条件/函数/数组的概念、知道源码和编译是什么、能读懂别人的代码、会用 git 和命令行。缺的只有两样：**C++ 的语法**（`&`、`const`、`::`、头文件、模板调用长什么样）和 **C++ 的内存模型**（栈 vs 堆、对象在哪、谁负责释放、指针指向哪）。
 
 > [!note] 你不是"零基础"，是"零 C++"
@@ -25,13 +26,12 @@ updated: 2026-10-14
 > 会 Python 的人学 C++，最容易在**第 3 天到第 3 周**之间崩溃。Python 里一行 `x = [1,2,3]` 的事，C++ 里要处理类型、头文件、构建系统、链接错误。
 > 你的生产力会**先下降再上升**。这不是退步，是工具链的固定成本——阶段 0 的唯一目的就是尽快把它付完。
 
----
-
 ## 诚实版难度说明
 
 > [!warning] 未验证：下面所有时间数字都是判断，不是测量
 > 基于"有编程基础、无 C++ 经验、无 DSP 数学"这个组合的常见经验，**没有引用任何学习研究或统计数据**。
 > 实际可能上下浮动 50%。请当**量级参考**，不要当承诺。
+
 | 阶段 | 你会做出什么 | 估算小时 |
 |---|---|---|
 | 0 · C++ 最小可用子集 | 一个能编译运行的命令行程序 | 15–25 |
@@ -48,13 +48,11 @@ updated: 2026-10-14
 | **10 小时**（稳定推进） | 2–3.5 个月 | 2.5–4 个月 |
 | **20 小时**（接近全职） | 1–2 个月 | 1.5–2 个月 |
 
-几句实话：**阶段 3 是全程最长的**，比"进入 JUCE"长得多，多数人以为难点在框架，其实难点在 DSP 本身；**阶段 1 心理上最容易放弃**，因为指针和内存没有听觉反馈，是唯一一个"产出不可听"的阶段；**上面的时间不含"卡住"的时间**，第一次遇到链接错误、段错误、插件在宿主里不出现，每次都可能吃掉一整个周末；**每周只有 3 小时的话**，问题不是"慢慢来"，而是每次开机都要重新加载上下文，实际效率远低于线性估算。
-
----
+几句实话：**阶段 3 是全程最长的**，比"进入 JUCE"长得多——多数人以为难点在框架，其实难点在 DSP 本身；**阶段 1 心理上最容易放弃**，因为它是唯一一个"产出不可听"的阶段；**上面的时间不含"卡住"的时间**，第一次遇到链接错误、段错误、插件在宿主里不出现，每次都可能吃掉一整个周末。
 
 ## 阶段 0：C++ 的最小可用子集
-**目标**：能用 C++ 写一个完整的、能编译运行的命令行程序。不求优雅，只求闭环。
 
+**目标**：能用 C++ 写一个完整的、能编译运行的命令行程序。不求优雅，只求闭环。
 **学什么**：编译运行流程（源码 → 目标文件 → 可执行文件）；基本类型 `int`/`float`/`double`/`bool`；函数（声明、定义、参数、返回值）；`std::vector<float>`；引用 `&` 与 `const`；类的最基本用法（成员变量 + 成员函数 + 构造函数）；`#include` 与头文件的作用。
 
 ```cpp
@@ -70,28 +68,29 @@ float peakLevel (const std::vector<float>& buffer)
     return peak;
 }
 ```
-**产出**：你能自己从零写出这种程序，并解释每一行（含一个 `main` 把它跑起来）。
+
+**产出**：你能自己从零写出这种程序并解释每一行（含一个 `main` 把它跑起来）。
 **怎么验证**：`clang++ -std=c++17 -Wall main.cpp -o main && ./main` 打印 `peak = 0.8`。加 `-Wall` 是硬要求——C++ 的警告里有大量真实的 bug 提示。
 
 > [!important] 明确列出：这些现在**不用学**
 > 这条比"学什么"更重要。零基础的人 90% 的时间浪费在这里。
 > **暂时跳过**：模板与模板元编程、多重继承、异常（exception）的完整语义、移动语义（move）与完美转发、智能指针、`std::thread` 与原子操作、`constexpr`、C++20 concepts / ranges / coroutines。
 > **什么时候再碰**：模板与智能指针在阶段 4 读 JUCE 源码时被动遇到；移动语义在阶段 3 之后关心拷贝开销时；并发与原子操作配合 [[SPSC 队列]] 学；其余长期不用。
->
 > **判据**：如果一个特性在"读一段音频处理代码"时不会挡路，就推迟它。
+
 **耗时与卡点**：15–25 小时；超过 35 小时还在原地，说明你在啃上面那张"暂时跳过"表——**回去写代码**。装不上编译器 → 用 Xcode Command Line Tools 就够，见 [[MOC - Frameworks & Toolchain]]；分不清 `.h` 和 `.cpp` → 先记住"声明放头文件、定义放源文件"；`#include <>` 与 `#include ""` 的区别 → 尖括号找系统路径，引号先找当前目录。
 
----
-
 ## 阶段 1：指针与内存（C++ 的真正门槛）
-**目标**：理解一个对象**在哪里**、**活多久**、**谁负责清理**。这是 Python/Java 背景的人唯一必须重新学习的部分。
 
+**目标**：理解一个对象**在哪里**、**活多久**、**谁负责清理**。这是 Python/Java 背景的人唯一必须重新学习的部分。
 **为什么音频编程必须理解内存**：Python 里你从不问"这个数组在哪"。但在音频里，这个问题的答案决定了**插件会不会爆音**。数据在**栈（stack）**上 → 分配极快、自动回收，但空间小（通常几 MB），生命周期限于函数作用域；数据在**堆（heap）**上 → 空间大、可跨函数存活，但分配要走系统调用，**耗时不可预测**。
 
 > [!important] 阶段 1 真正的产出不是"会用指针"
 > 而是**建立起"这块内存在哪"的本能**。因为 [[实时音频线程契约]] 的第一条禁令就是"音频线程里不能分配内存"——
 > 如果你连"这一行会不会分配"都判断不出来，那条契约对你就是一句空话。
-**学什么**：指针 `T*` 与取地址 `&`；栈 vs 堆；C 数组 `float buf[512]` 会退化成指针、**不知道自己的长度**（无数越界 bug 的源头）；`std::vector` 的扩容行为（`push_back` 可能触发重新分配 → 音频线程禁用）；越界访问与段错误（不一定立刻崩，可能静默破坏别的数据）；`nullptr`。
+
+**学什么**：指针 `T*` 与取地址 `&`；栈 vs 堆；C 数组 `float buf[512]` 会退化成指针、**不知道自己的长度**；`std::vector` 的扩容行为（`push_back` 可能触发重新分配 → 音频线程禁用）；越界访问与段错误（不一定立刻崩，可能静默破坏别的数据）；`nullptr`。
+
 **产出**：一个自己实现的**环形缓冲区（ring buffer）**。
 
 ```cpp
@@ -100,13 +99,11 @@ class RingBuffer
 {
 public:
     void prepare (int n) { buffer.assign ((size_t) n, 0.0f); writePos = 0; }  // ⚠️ 只在这里分配
-
     void write (float x)                        // ✅ 音频线程可安全调用：只读写
     { buffer[(size_t) writePos] = x; writePos = (writePos + 1) % (int) buffer.size(); }
-
-    float readDelayed (int delaySamples) const  // 0 = 最近写入的那个
+    float readDelayed (int d) const             // 0 = 最近写入的那个
     {
-        int idx = writePos - 1 - delaySamples;
+        int idx = writePos - 1 - d;
         while (idx < 0) idx += (int) buffer.size();   // ⚠️ C++ 的 % 对负数返回负值
         return buffer[(size_t) idx];
     }
@@ -115,27 +112,26 @@ private:
     int writePos = 0;
 };
 ```
-**怎么验证**：① 往 8 格缓冲区写 1..20，读 `readDelayed(3)` 应为 17，手算对照；② 故意写 `readDelayed(100)`（超容量），看它会不会崩——**理解为什么它不一定崩，比让它崩更重要**；③ 用 `-fsanitize=address` 重编译再跑，看越界有没有被抓到，见 [[AddressSanitizer]]。
-**耗时与卡点**：15–25 小时。段错误只告诉你"崩了"不告诉你"哪一行" → 学 `lldb` 或 ASan，见 [[lldb 基础]]；以为 `std::vector` 是"动态数组所以随便用" → 它每次扩容都要分配 + 拷贝；写成 `buffer[writePos - delaySamples]` → 负数下标是未定义行为。
 
----
+**怎么验证**：① 往 8 格缓冲区写 1..20，读 `readDelayed(3)` 应为 17，手算对照；② 故意写 `readDelayed(100)`（超容量），看它会不会崩——**理解为什么它不一定崩，比让它崩更重要**；③ 用 `-fsanitize=address` 重编译再跑，看越界有没有被抓到，见 [[AddressSanitizer]]。
+
+**耗时与卡点**：15–25 小时。段错误只告诉你"崩了"不告诉你"哪一行" → 学 `lldb` 或 ASan，见 [[lldb 基础]]；以为 `std::vector` 是"动态数组所以随便用" → 它每次扩容都要分配 + 拷贝；写成 `buffer[writePos - delaySamples]` → 负数下标是未定义行为。
 
 ## 阶段 2：读写 WAV 文件 —— 第一次听到自己的代码
 
 > [!important] 这是整条路线的情绪转折点
 > 前两个阶段的产出都是"打印出来的数字"。这个阶段结束时，**你会第一次听到一段由你自己的 C++ 代码处理过的音频。**
 > 这一声比后面任何阶段都重要——它是你坚持下去的燃料。
-**目标**：不借助任何音频库，手写 WAV 解析与写入。
-**为什么不用库**：因为你需要知道"音频数据到底是什么"。一个 16-bit 立体声 WAV，剥掉头部之后**就是一串交错的整数**。这个认识一旦建立，后面所有 DSP 都只是"对这串数字做运算"。
+
+**目标**：不借助任何音频库，手写 WAV 解析与写入。**为什么不用库**：因为你需要知道"音频数据到底是什么"——一个 16-bit 立体声 WAV，剥掉头部之后**就是一串交错的整数**。这个认识一旦建立，后面所有 DSP 都只是"对这串数字做运算"。
 **学什么**：RIFF / WAVE 容器结构（`RIFF` 头 + 一串 chunk：`fmt `、`data`，可能还有 `LIST`/`fact`）；**小端（little-endian）**字节序；位深（bit depth）与 `[-1, 1]` 浮点的映射；交错（interleaved）存储 `L R L R ...`；浮点转 `int16` 前**必须钳制**，否则整数回绕成巨大噪声。
 
 ```cpp
 struct WavData { std::vector<float> samples; uint32_t sampleRate = 0;
                  uint16_t numChannels = 0, bitsPerSample = 0; };
 
-// 逐字节读最稳 —— 直接 read 进结构体会被编译器插入的 padding 搞错字段位置。
-// WAV 一律小端。
-static uint32_t readLE (std::ifstream& f, int n)
+// 逐字节读最稳 —— 直接 read 进结构体会被编译器插入的 padding 搞错字段位置
+static uint32_t readLE (std::ifstream& f, int n)   // 读 n 字节，按小端拼成整数
 {
     unsigned char b[4] = { 0, 0, 0, 0 };
     f.read (reinterpret_cast<char*> (b), n);
@@ -159,39 +155,34 @@ WavData loadWav (const std::string& path)
         const std::string tag (id, 4);
 
         if (tag == "fmt ")   // format(2) ch(2) rate(4) byteRate(4) align(2) bits(2)
-        {
-            readLE (f, 2);
-            out.numChannels = (uint16_t) readLE (f, 2);  out.sampleRate = readLE (f, 4);
-            readLE (f, 4); readLE (f, 2);                out.bitsPerSample = (uint16_t) readLE (f, 2);
-        }
+        {   readLE (f, 2);
+            out.numChannels = (uint16_t) readLE (f, 2); out.sampleRate = readLE (f, 4);
+            readLE (f, 4); readLE (f, 2);               out.bitsPerSample = (uint16_t) readLE (f, 2); }
         else if (tag == "data")
-        {
-            out.samples.resize (size / (out.bitsPerSample / 8));
-            for (float& s : out.samples)
-            {
-                if (out.bitsPerSample == 16)    // int16 → float：除以 32768
-                    s = (float) (int16_t) readLE (f, 2) / 32768.0f;
-                else                            // 32-bit float：位模式即 IEEE-754
-                { const uint32_t b = readLE (f, 4); std::memcpy (&s, &b, 4); }
-            }
-        }
+        {   out.samples.resize (size / (out.bitsPerSample / 8));
+            for (float& x : out.samples)
+                if (out.bitsPerSample == 16)   // int16 → float：除以 32768
+                    x = (float) (int16_t) readLE (f, 2) / 32768.0f;
+                else                           // 32-bit float：位模式即 IEEE-754
+                { const uint32_t b = readLE (f, 4); std::memcpy (&x, &b, 4); } }
         // 跳到 chunk 末尾；size 为奇数时有一个补齐字节，这是 WAV 的硬规定
         f.seekg (chunkStart + (std::streamoff) size + (std::streamoff) (size & 1));
     }
     return out;
 }
 ```
+
 **产出**：一个命令行程序 `gain in.wav out.wav -6`，把音量降低 6 dB 并写出新文件。
 
 ```cpp
 float dbToGain (float dB) { return std::pow (10.0f, dB / 20.0f); }
-
 int16_t toPcm16 (float x)
 {
     x = std::clamp (x, -1.0f, 1.0f);        // ⚠️ 不钳制就会整数回绕 → 爆音
     return (int16_t) std::lround (x * 32767.0f);
 }
 ```
+
 **怎么验证**：用 Python 对照读两个文件，确认峰值比正好是 -6 dB。
 
 ```python
@@ -208,16 +199,17 @@ assert abs(ratio_db + 6.0) < 0.1, "增益不对，或钳制出问题了"
 > [!tip] 从这里开始，你的验证方式变了
 > 阶段 0–1 是"打印数字对不对"。从阶段 2 起是**"耳朵 + 图 + 数字"三重验证**。
 > 你有前电子音乐人的耳朵，这是纯 CS 背景的人没有的验证通道——但**耳朵不能替代断言**，两者都要有。见 [[DSP 单元测试怎么写]]。
-**耗时与卡点**：10–18 小时。把文件 `read` 进结构体 → padding 导致字段错位，`sampleRate` 变成天文数字；忽略 chunk 的奇数补齐字节 → 后面所有数据错位一位，声音变成噪声；只处理 `fmt ` 恰好 16 字节 → 很多文件带扩展字段，必须按 `size` 跳过；浮点转整数忘了钳制 → 安静处突然爆响；用文本模式打开二进制 → 永远加 `std::ios::binary`。
 
----
+**耗时与卡点**：10–18 小时。把文件 `read` 进结构体 → padding 导致字段错位；忽略 chunk 的奇数补齐字节 → 后面所有数据错位一位，声音变成噪声；只处理 `fmt ` 恰好 16 字节 → 很多文件带扩展字段，必须按 `size` 跳过；浮点转整数忘了钳制 → 安静处突然爆响。
 
 ## 阶段 3：第一个 DSP
+
 **目标**：在命令行程序里实现 5 个模块，**每个都用 Python 画图验证**。
 
 > [!warning] 这一阶段不要碰 JUCE
 > 理由见 [[ADR-002 选择框架]]：框架会掩盖你对信号流的理解，而信号流是后面一切的基础。
 > 在命令行里你能看到每一个采样；在 JUCE 里你只能看到 `processBlock` 的参数。
+
 | # | 模块 | 一句话原理 | 验证方式 |
 |---|---|---|---|
 | 1 | 增益（gain） | 逐采样乘一个系数 | 峰值比 = dB 换算值 |
@@ -227,43 +219,40 @@ assert abs(ratio_db + 6.0) < 0.1, "增益不对，或钳制出问题了"
 | 5 | 延迟线 | 环形缓冲区 + 分数延迟插值 | 脉冲进、延迟后脉冲出 |
 
 ```cpp
-// 一阶低通：y[n] = y[n-1] + a · (x[n] - y[n-1])
-// a = 1 - exp(-2π·fc/fs)  —— fc 越低，a 越小，输出越"懒"
+// 一阶低通：y[n] = y[n-1] + a · (x[n] - y[n-1])，a = 1 - exp(-2π·fc/fs)
 class OnePole
 {
 public:
-    void setCutoff (float cutoffHz, float sampleRate)
-    { a = 1.0f - std::exp (-2.0f * 3.14159265f * cutoffHz / sampleRate); }
-    float process (float x) { y += a * (x - y); return y; }   // 一次乘加，极省 CPU
+    void setCutoff (float fc, float fs)
+    { a = 1.0f - std::exp (-2.0f * 3.14159265f * fc / fs); }   // fc 越低，a 越小
+    float process (float x) { y += a * (x - y); return y; }    // 一次乘加，极省 CPU
 private:
     float a = 0.0f, y = 0.0f;
 };
 
-// 分数延迟：线性插值读出"两个采样之间"的值。需要它是因为
-// 延迟时间很少正好是整数个采样。见 [[插值]]
-float readFractional (const RingBuffer& rb, float delaySamples)
+// 分数延迟：线性插值读出"两个采样之间"的值 —— 延迟时间很少正好是整数个采样
+float readFractional (const RingBuffer& rb, float d)          // 见 [[插值]]
 {
-    const int   i0   = (int) delaySamples;
-    const float frac = delaySamples - (float) i0;
+    const int i0 = (int) d;  const float frac = d - (float) i0;
     const float a = rb.readDelayed (i0), b = rb.readDelayed (i0 + 1);
-    return a + frac * (b - a);                  // 线性插值
+    return a + frac * (b - a);
 }
 ```
 
 > [!important] 从阶段 3 开始，参数必须平滑
 > 增益和滤波器频率**不能直接跳变**，否则会听到拉链噪声（zipper noise）。这不是优化，是正确性要求。
 > 滤波器还有一个额外的坑：**不要直接平滑系数**，要平滑"频率、Q"这些参数然后重算系数。见 [[参数平滑 parameter smoothing]]。
+
 **怎么验证**（每个模块都做）：① **脉冲响应**——喂单位脉冲（首采样 1，其余 0），画输出，看稳定性与衰减；② **频响**——喂对数扫频，对输出做 FFT，看幅频曲线是否符合理论；③ **直流**——喂恒定 1.0，低通应输出 1.0，高通应输出 0.0。
 
 > [!tip] 让 AI 写验证脚本，不要让它写 DSP
 > 这三类测试的 Python 脚本非常适合交给 Agent 生成。但 DSP 本身必须你自己写——**否则你不会有"这个数不对"的直觉**。
-**耗时与卡点**：30–50 小时，**全程最长**，也是收益最持久的阶段。滤波器"爆炸"（输出变 `inf`/`nan`）→ 系数没归一化、符号约定抄错、参数没钳制，见 [[Biquad 滤波器]]；静音时 CPU 飙升 → denormal 数，见 [[denormal 数处理]]；立体声串音 → 两声道共用了一组滤波器状态，**一个声道一个实例**；扫频有阶梯感 → 系数每 block 才更新一次；FFT 看频响毛刺大 → 忘了加窗，见 [[窗函数]]。
 
----
+**耗时与卡点**：30–50 小时，**全程最长**，也是收益最持久的阶段。滤波器"爆炸"（输出变 `inf`/`nan`）→ 系数没归一化、符号约定抄错、参数没钳制，见 [[Biquad 滤波器]]；静音时 CPU 飙升 → denormal 数，见 [[denormal 数处理]]；立体声串音 → 两声道共用了一组滤波器状态，**一个声道一个实例**；扫频有阶梯感 → 系数每 block 才更新一次，见 [[窗函数]]。
 
 ## 阶段 4：进入 JUCE
-**目标**：**一个能在 DAW 里加载并出声的插件。**
-**前置条件**：阶段 3 的 5 个模块你都能自己写、能解释、能验证。达不到就回去补——**在 JUCE 里调试 DSP 比在命令行里难十倍**。
+
+**目标**：**一个能在 DAW 里加载并出声的插件。** 前置条件：阶段 3 的 5 个模块你都能自己写、能解释、能验证——达不到就回去补，**在 JUCE 里调试 DSP 比在命令行里难十倍**。
 
 **学什么**：JUCE 项目结构（`PluginProcessor` + `PluginEditor` 的分工，见 [[JUCE 的架构与模块划分]]）；`AudioProcessor` 生命周期（构造 → `prepareToPlay` → `processBlock` × N → `releaseResources`）；`AudioBuffer<float>`（注意它是**分离声道**而非交错）；CMake 构建（见 [[JUCE 的 CMake API]]、[[CMake 插件项目结构]]）；Standalone 模式（**调试利器**，不用开 DAW 就能测）。
 
@@ -271,20 +260,16 @@ float readFractional (const RingBuffer& rb, float delaySamples)
 class MyFirstProcessor : public juce::AudioProcessor
 {
 public:
+    // 构造函数只做轻活：宿主扫描插件时会构造它（BusesProperties 声明立体声进出）
     MyFirstProcessor() : juce::AudioProcessor (BusesProperties()
           .withInput ("In", juce::AudioChannelSet::stereo(), true)
           .withOutput ("Out", juce::AudioChannelSet::stereo(), true))
-    {
-        // 构造函数只做轻活：宿主扫描插件时会构造它
-        addParameter (gainDb = new juce::AudioParameterFloat (
-            juce::ParameterID { "gain", 1 }, "Gain", -24.0f, 24.0f, 0.0f));
-    }
+    {   addParameter (gainDb = new juce::AudioParameterFloat (
+            juce::ParameterID { "gain", 1 }, "Gain", -24.0f, 24.0f, 0.0f)); }
 
     void prepareToPlay (double sampleRate, int) override   // 会被反复调用，必须幂等
-    {
-        smoothedGain.reset (sampleRate, 0.02);             // 20 ms 平滑
-        smoothedGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (gainDb->get()));
-    }
+    {   smoothedGain.reset (sampleRate, 0.02);             // 20 ms 平滑
+        smoothedGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (gainDb->get())); }
 
     void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
     {
@@ -307,27 +292,25 @@ private:
 > [!warning] 这段代码里有两个新手必踩的坑
 > 1. `processBlock` 第一行不判断 `n == 0` → 某些宿主会给空 block
 > 2. 把 `getNextValue()` 写进**声道循环内部** → 平滑器每个声道各推进一次，左右声道得到不同增益，声像漂移。**平滑器每采样只能推进一次。**
->
 > 另外：`AudioParameterFloat` 的第一个参数在较新的 JUCE 里是 `juce::ParameterID { "id", versionHint }`，老版本接受裸字符串。以你锁定的 release tag 的文档为准。
+
 **产出**：构建产物出现在 `_artefacts/` 下，DAW 能扫描到，加载后音频能通过。
 **怎么验证**：① **先跑 Standalone**，不要一上来就开 DAW——这一步能把"宿主交互问题"和"DSP 问题"分流；② 再在 DAW 里加载，确认能出声；③ 跑 `pluginval` 或 `auval`，见 [[插件合规性测试：pluginval]]、[[auval 与 AU 验证]]。
-**耗时与卡点**：20–35 小时，其中**至少一半花在工具链而不是 DSP 上**。插件在 DAW 里根本不出现 → 扫描机制、安装路径、格式没勾选，见 [[插件扫描机制]]；一加载就崩 → 构造函数里做了重活；改采样率后声音错乱 → 系数只在构造函数里算过一次，见 [[采样率变化处理]]；Debug 构建慢到不能用 → 调试用 Standalone + Debug，测声音用 Release；编译要几分钟 → JUCE 编译时间长是常态，配 ccache，见 [[ccache 与编译缓存]]。
 
----
+**耗时与卡点**：20–35 小时，其中**至少一半花在工具链而不是 DSP 上**。插件在 DAW 里根本不出现 → 扫描机制、安装路径、格式没勾选，见 [[插件扫描机制]]；一加载就崩 → 构造函数里做了重活；改采样率后声音错乱 → 系数只在构造函数里算过一次，见 [[采样率变化处理]]；编译要几分钟 → 配 ccache，见 [[ccache 与编译缓存]]。
 
 ## 阶段 5：加上 GUI 和参数
-**目标**：插件有旋钮、能被宿主自动化、关掉工程再打开参数还在。
 
-**学什么**：参数系统 `AudioParameterFloat` / `AudioProcessorValueTreeState`（见 [[参数自动化与线程安全]]）；参数范围与曲线（**频率参数必须用对数映射**，否则旋钮手感全错，见 [[MOC - UI & UX]]）；旋钮控件 `juce::Slider` 与 `SliderAttachment`（见 [[JUCE 的 Slider 与旋钮]]）；状态保存与恢复 `getStateInformation` / `setStateInformation`（见 [[状态保存与恢复]]）；界面布局 `resized()` + `FlexBox`/`Grid`（见 [[JUCE Component 体系]]）。
+**目标**：插件有旋钮、能被宿主自动化、关掉工程再打开参数还在。**学什么**：参数系统 `AudioParameterFloat` / `AudioProcessorValueTreeState`（见 [[参数自动化与线程安全]]）；参数范围与曲线（**频率参数必须用对数映射**，否则旋钮手感全错，见 [[MOC - UI & UX]]）；旋钮控件 `juce::Slider` 与 `SliderAttachment`（见 [[JUCE 的 Slider 与旋钮]]）；状态保存与恢复 `getStateInformation` / `setStateInformation`（见 [[状态保存与恢复]]）；界面布局 `resized()` + `FlexBox`/`Grid`（见 [[JUCE Component 体系]]）。
 
 > [!important] 参数设计是你的主场
 > 你在合成器上拧了十年旋钮，你知道**什么范围、什么默认值、什么曲线是对的**。
 > 这是纯 CS 背景的开发者最容易做砸的地方——他们会把 cutoff 做成 0–20000 Hz 的线性旋钮，然后没人愿意用。
 > 把这份直觉写进 [[从音乐制作人到插件开发者]] 的翻译表里。
-**产出与验证**：插件有 2–3 个旋钮，能自动化，能保存状态。① 拖旋钮 → 声音连续变化，**没有咔哒声**；② 宿主里画自动化曲线 → 播放时参数跟着走；③ 关掉工程重开 → 旋钮位置和声音完全恢复；④ `pluginval --strictness-level 10` 通过，见 [[插件验证工具]]。
-**耗时与卡点**：20–30 小时。旋钮动了但声音不变 → 参数没在 `processBlock` 里读；旋钮一动就爆音 → 没做平滑，见 [[参数平滑 parameter smoothing]]；关掉再打开参数回默认值 → 忘了实现 `getStateInformation`；界面拉伸后控件乱飞 → 用了绝对像素坐标；销毁顺序导致崩溃 → Attachment 的生命周期陷阱，见 [[MOC - UI & UX]]。
 
----
+**产出与验证**：插件有 2–3 个旋钮，能自动化，能保存状态。① 拖旋钮 → 声音连续变化，**没有咔哒声**；② 宿主里画自动化曲线 → 播放时参数跟着走；③ 关掉工程重开 → 旋钮位置和声音完全恢复；④ `pluginval --strictness-level 10` 通过，见 [[插件验证工具]]。
+
+**耗时与卡点**：20–30 小时。旋钮动了但声音不变 → 参数没在 `processBlock` 里读；旋钮一动就爆音 → 没做平滑，见 [[参数平滑 parameter smoothing]]；关掉再打开参数回默认值 → 忘了实现 `getStateInformation`；销毁顺序导致崩溃 → Attachment 的生命周期陷阱，见 [[MOC - UI & UX]]。
 
 ## 为什么不用先学完数学
 
@@ -335,6 +318,7 @@ private:
 > 做**效果器**需要的数学是**很窄的一片**：复数、z 变换、差分方程、一点三角函数。
 > 而且它有一个别的学科没有的性质：**你可以用到哪学到哪，因为每一步都有听觉反馈**。
 > 你不需要"理解"一个滤波器才能听出它把高频砍掉了。
+
 | DSP 主题 | 需要的数学 | 什么时候真的需要 |
 |---|---|---|
 | 增益、淡入淡出、混音 | 四则运算、dB 换算 | 立刻 |
@@ -356,16 +340,15 @@ private:
 > [!note] 关于"线性代数没问题"这件事
 > 它的实际含义是：**多声道 / 空间音频**（Ambisonics、波场合成、多扬声器解码，本质都是矩阵运算）；**反馈延迟网络 FDN**（混响的核心是一个反馈矩阵，见 [[反馈延迟网络 FDN]]）；**神经网络音频**（实时推理就是矩阵乘法，见 [[MOC - AI Audio]]）；**自适应滤波**（LMS 的推导是向量内积与梯度，见 [[自适应滤波 LMS 与 RLS]]）。
 > **你的数学缺口是"复数 + z 变换"这一小块，不是"数学"整体**——它其实是一个很具体的、两三个周末能补上的洞。
->
+
 > [!warning] 但有一个例外
 > 如果你要做**合成器**（振荡器抗混叠、滤波器稳定性）或**物理建模**，数学门槛会显著上升，而且很难"用到再学"。
 > 建议：**先做效果器**。效果器的正确性容易验证（输入输出对比），合成器难。
 
----
-
 ## 练习项目清单
 
 由易到难，每条都能独立完成，且都有明确的验证方式。
+
 | # | 做什么 | 验证什么 |
 |---|---|---|
 | 1 | 写函数 `dbToGain(dB)`，打印 -6 / 0 / +6 的结果 | 得到 0.501 / 1.0 / 1.995 —— **记住 -6 dB ≈ 一半** |
@@ -388,16 +371,14 @@ private:
 > 不是写"我学会了 X"，而是写**你踩到的坑**，打上 `#gotcha` 标签。
 > 见 [[2026-10-14 Obsidian 链接名不能含斜杠]] 那个例子——那种"设计带来的盲区"才是知识库里最值钱的内容。
 
----
-
 ## 常见卡点与解法
+
 | 卡点 | 一句实用建议 |
 |---|---|
 | **编译错误看不懂** | **永远从输出的第一行读起**。C++ 编译器会因为一个缺失的分号报出 200 行错误 |
 | **链接错误（linker error）** | 不是语法错误，是"找不到实现"或"实现了两次"：函数声明了没定义？`.cpp` 忘了加进构建？头文件里定义了函数（应加 `inline` 或挪到 `.cpp`）？ |
 | **段错误（segfault）** | 99% 是访问了不该访问的内存（空指针、越界、用了已释放的对象）。**用 `-fsanitize=address` 重编译**，见 [[AddressSanitizer]] |
-| **浮点精度** | `float` 只有约 7 位有效数字。**滤波器内部状态、长时间累加用 `double`**；音频样本用 `float` 通常够 |
-| **`std::vector` 越界** | `operator[]` **不做边界检查**。调试时用 `.at()`，或用 ASan。绝不假设"它没崩就是对的" |
+| **浮点精度 / 越界** | `float` 只有约 7 位有效数字——**滤波器内部状态、长时间累加用 `double`**。`std::vector::operator[]` **不做边界检查**，调试时用 `.at()` 或 ASan；绝不假设"它没崩就是对的" |
 | **头文件与实现分离** | 两条：**声明放 `.h`，定义放 `.cpp`**；头文件里只放 `inline` 函数和类定义 |
 | **构建系统** | 抄一个能用的模板改路径和文件名，**别从零写 CMakeLists**。见 [[CMake 基础]] |
 | **符号约定不统一** | 不同资料的差分方程符号约定不同，抄公式前先确认，见 [[Biquad 滤波器]] |
@@ -417,16 +398,14 @@ private:
 > | **过度设计** | 你要一个增益，它给你一个带策略模式的 `GainProcessorFactory` |
 >
 > **防御办法**（缺一不可）：① **每一行都要能解释**，解释不了的行删掉重写，或让 AI 逐行讲解到你能复述；② **让它遵守 [[实时音频线程契约]]**，提示词里明确写"音频线程内不得分配、加锁、打日志、抛异常"；③ **用测试验证而不是用编译验证**——"能编译"和"能出声"都不是正确性证据；④ **DSP 核心逻辑自己写**（见下一节）；⑤ **查 API 是否存在**，编译一次就知道，别在脑子里推理。
->
 > 更完整的清单见 [[AI 生成代码的审查清单]]、[[为什么 AI 写不好实时音频代码]]。
-
----
 
 ## 关于"用 AI 辅助"的正确姿势
 
 你想用 AI/Agent 写代码，这是对的——但**分工搞错会毁掉整条路线**。
 
 **让 AI 做最划算的事**：
+
 | 任务 | 为什么划算 |
 |---|---|
 | **写 Python 分析脚本** | FFT、画图、扫频生成、对比两个文件——"我懂要什么但不想查 API"的活，省 80% 时间，且错了立刻能看出来 |
@@ -434,8 +413,7 @@ private:
 | **解释不熟悉的语法** | `const auto&` 是什么意思、`override` 干什么用的，比翻书快 |
 | **写测试用例与边界输入** | 让它生成"喂 0 长度缓冲区""喂 NaN""喂超范围参数"这类用例，你判断结果对不对 |
 | **写构建配置与样板代码** | CMakeLists、插件骨架、状态序列化——没有学习价值，抄就行 |
-| **当"源码导游"** | 问它"`prepareToPlay` 会被调用几次""这个类的生命周期是什么"，见 [[用 AI 读懂 JUCE 源码]] |
-| **审查实时安全性** | 把 `processBlock` 贴给它，问"这里有没有分配、加锁、阻塞"。它的检查比人可靠 |
+| **当"源码导游" / 审查实时安全性** | 问它"`prepareToPlay` 会被调用几次""这个类的生命周期是什么"（见 [[用 AI 读懂 JUCE 源码]]）；或把 `processBlock` 贴给它问"这里有没有分配、加锁、阻塞" |
 
 > [!important] DSP 核心逻辑必须自己写
 > 原因不是道德，是**功能性**的：**你需要建立直觉，否则你无法调试。**
@@ -444,8 +422,8 @@ private:
 > 你只能靠"我知道这个滤波器应该长什么样"来判断。
 >
 > 如果 DSP 是 AI 写的，你手上就只有一个黑盒。当它出问题时（一定会），你的调试手段只剩下"把代码贴回给 AI，让它猜"——它会猜错，而且你没法判断它猜错了。
->
 > **你的耳朵是你唯一的优势，而耳朵只有配上"知道代码在干什么"才有用。**
+
 **必须自己写**：所有滤波器、延迟线、检测器的实现；参数怎么映射到 DSP 内部（范围、曲线、单位）；平滑时间常数的选择；信号流的拓扑（先滤波还是先饱和？侧链从哪取？）。**可以让 AI 写**：测试脚本、绘图、构建配置、UI 布局样板、状态序列化的代码。
 
 **为什么"能跑但不懂"的代码在音频领域特别危险**——普通 CRUD 程序里，一段不懂的代码最多是"以后维护麻烦"。音频插件里，它会导致三类你在别处遇不到的问题：
@@ -457,8 +435,6 @@ private:
 > [!note] 建议的协作模式
 > 参见 [[_meta/open-questions]] Q8：**用"结对"模式起步**——你设计 + 写 DSP，Agent 写测试 + 解释 + 审查。
 > 不要用"代笔"模式，那样你三个月后会有一个自己看不懂的插件，和一个被 AI 自言自语污染的知识库。
-
----
 
 ## 相关
 

@@ -151,8 +151,7 @@ $$\boxed{I = \frac{\Delta f}{f_m}}$$
 ```cpp
 struct FmOperator
 {
-    void prepare (double sr) { sampleRate = sr; phase = 0.0; }
-
+    double phase = 0.0, sampleRate = 48000.0;
     // phaseMod: 来自调制器的相位偏移（弧度）
     float process (float freqHz, float phaseMod)
     {
@@ -160,9 +159,7 @@ struct FmOperator
         if (phase > 2.0 * double_Pi) phase -= 2.0 * double_Pi;  // 防精度损失
         return std::sin ((float) phase + phaseMod);              // ← 是 + 不是 ×
     }
-    double phase = 0.0, sampleRate = 48000.0;
 };
-
 // 载波 + 调制器：index 就是调制指数 I
 float fmSample (FmOperator& c, FmOperator& m, float cHz, float mHz, float index)
 { return c.process (cHz, index * m.process (mHz, 0.0f)); }
@@ -357,49 +354,35 @@ $$f_0 = \frac{f_s}{N + \phi_{\text{filter}}(f_0)}$$
 > **这就是"粉噪声更自然"的全部原因**：不是更"物理"，而是**更匹配听觉的频率分辨率**。
 
 ```cpp
-// 前提：随机数生成器必须是**成员**，在 prepareToPlay 里构造/播种
+// ⚠️ 下面把 RNG 和状态写成全局，只是为了**看清算法**。
+//    真实插件里它们必须是**类的成员**，在 prepareToPlay 里构造/播种 ——
+//    否则多个插件实例会互相干扰，而且违反实时契约。
 // ❌ 不要用 std::random_device（系统调用，会阻塞音频线程）
-// ❌ 不要把分布对象写成函数内 static
-struct Rng
-{
-    std::mt19937 gen;
-    std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
-    void prepare (std::uint32_t seed) { gen.seed (seed); }
-    float next() { return dist (gen); }               // 白噪声：[-1, 1)
-};
+// ❌ 不要把分布对象写成函数内 static（初始化可能发生在音频线程）
+std::mt19937 gen;  std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
+float white() { return dist (gen); }
 
-// 粉噪声：Voss-McCartney —— 叠加多行白噪声，第 k 行每 2^k 个采样才更新一次。
+// 粉噪声 Voss-McCartney：叠加 16 行白噪声，第 k 行每 2^k 个采样才更新一次。
 // 更新越慢的行能量越集中在低频，加起来就是近似的 1/f 谱。
-struct PinkNoise
+// 实测频谱斜率 -3.5 dB/oct（理论 -3.0），对听感已足够"粉"。
+std::array<float,16> v {};  std::uint32_t counter = 0;
+float pink()
 {
-    static constexpr int rows = 16;
-    std::array<float, rows> v {};
-    std::uint32_t counter = 0;
-    Rng rng;
+    ++counter;  std::uint32_t mask = 1;  int row = 0;
+    while (row < 15 && (counter & mask) != 0) { mask <<= 1; ++row; }
+    v[row] = white();                        // 最低的 0 位 → 更新哪一行
+    float sum = 0.0f;  for (float x : v) sum += x;
+    return sum * (1.0f / 16.0f);
+}
 
-    void prepare (std::uint32_t seed) { rng.prepare (seed); v.fill (0.0f); counter = 0; }
-
-    float process()
-    {
-        ++counter;
-        std::uint32_t mask = 1; int row = 0;
-        while (row < rows - 1 && (counter & mask) != 0) { mask <<= 1; ++row; }
-        v[row] = rng.next();                          // 最低的 0 位 → 决定更新哪一行
-
-        float sum = 0.0f;
-        for (float x : v) sum += x;
-        return sum * (1.0f / rows);
-    }
-};
-
-// 布朗噪声：有泄漏的积分。leak < 1 是为了防止直流漂移无限累积
-float brownNext (Rng& rng, float& state)
-{ state = 0.99f * state + 0.05f * rng.next(); return state * 4.0f; }  // ×4 补偿幅度
+// 布朗噪声：有泄漏的积分（leak < 1 防止直流漂移累积）
+float brown (float& s) { s = 0.99f * s + 0.05f * white();  return s * 4.0f; }
 ```
 
-> [!note] 一个更省 CPU 的粉噪声做法
-> 用白噪声过一个近似 −3 dB/oct 的**滤波器**（几个极零点组合），比 Voss-McCartney 便宜但精度略差。
-> 网上流传的系数版本很多，**请自己用 FFT 测频谱斜率再采用**——不同版本的归一化和精度差别很大。
+> [!warning] 待验证：粉噪声的滤波器系数
+> 一个更省 CPU 的做法是用白噪声过一个近似 −3 dB/oct 的**滤波器**（几个极零点组合），
+> 比 Voss-McCartney 便宜但精度略差。网上流传的系数版本很多，归一化各不相同——
+> **本页不给具体系数**，请自己用 FFT 测频谱斜率确认后再采用（见文末「怎么验证」测试 3）。
 
 | 噪声 | 音乐用途 |
 |---|---|
@@ -432,19 +415,16 @@ $$y(t) = y_{\text{target}} + (y_{\text{start}} - y_{\text{target}}) \cdot e^{-t/
 > 符合听感上的"均匀衰减"。真实乐器的自然衰减（拨弦、击键）也都是指数衰减。
 
 ```cpp
-// 指数包络：关键技巧是内部目标值要**超过**最终值，才能在指定时间内到达
+// 关键技巧：内部目标值要**超过**最终值，才能在指定时间内到达
 void startSegment (float start, float final, float timeSec, float curve)
 {
     current = start;
     const float tau = timeSec / curve;              // curve ≈ 4.6 时接近"4.6τ 到达"
     coeff = 1.0f - std::exp (-1.0f / (sampleRate * tau));
-
-    // 反解过冲目标：使 y 在 timeSec 后恰好等于 final
-    // y(t) = target + (start - target) * k,  k = exp(-T/tau)
+    // 反解过冲目标，使 y 在 timeSec 后恰好等于 final：y(t) = target + (start-target)·k
     const float k = std::exp (-timeSec / tau);
     target = (k < 0.9999f) ? (final - k * start) / (1.0f - k) : final;
 }
-
 float next() { current += (target - current) * coeff; return current; }  // 每采样调用
 ```
 
@@ -455,16 +435,18 @@ float next() { current += (target - current) * coeff; return current; }  // 每�
 
 | LFO 波形 | 调制特征 | 典型用途 |
 |---|---|---|
-| 正弦 | 平滑无棱角 | vibrato、滤波扫频、混响去相关 |
-| 三角 | 线性升降，比正弦"更均匀" | 音高调制、tremolo |
-| 锯齿 | 单向扫描，有跳变 | 节奏性的上升/下降 |
-| 方波 | 只有两个状态 | trill、八度跳变、硬切换 |
+| 正弦 / 三角 | 平滑无棱角 / 线性升降 | vibrato、滤波扫频、混响去相关；音高调制、tremolo |
+| 锯齿 / 方波 | 单向扫描有跳变 / 只有两个状态 | 节奏性的上升下降；trill、八度跳变、硬切换 |
 | 采样保持（S&H） | 阶梯随机 | "随机步进"，复古感 |
 | 平滑随机 | 缓慢漂移 | 模拟漂移、自然感、**去相关** |
 
 **速率范围**：< 0.1 Hz 听成"参数慢慢变了"；0.1–5 Hz 是 vibrato 下限、混响的"活"感；
 **5–8 Hz 是 vibrato 常用区**（人声、弦乐）；8–20 Hz 是 tremolo、音高抖动（flutter）；
 > 20 Hz 进入音频速率 → 变成 FM/AM 音色。
+
+> [!warning] 待验证：上面的速率分界
+> 这是合成器设计领域的常见惯例，不是从资料推导出的结论，不同来源给出的分界也不一致。
+> **做插件时把它当作默认值和参数范围的起点，靠听感调**，不要当成硬性规则。
 
 > [!important] LFO 相位在多声道里是"宽度旋钮"
 > 左右用**同一个** LFO（同相）→ 声像不变；左右用**相位差 90°–180°** → 声音变宽。
@@ -474,7 +456,6 @@ float next() { current += (target - current) * coeff; return current; }  // 每�
 >
 > **LFO 不能随便加到任何参数上**：加到**延迟时间** → 故意要的多普勒（chorus 就靠这个）；
 > 加到**滤波器系数** → 必须每采样更新系数，否则有"阶梯感"；加到**增益** → 相对安全。
-> 见 [[参数平滑 parameter smoothing]]。
 
 ---
 
@@ -537,26 +518,18 @@ float next() { current += (target - current) * coeff; return current; }  // 每�
 **数值测试**
 
 ```cpp
-// 测试 1：抗混叠 —— 合成器开发的两根支柱之一
-// 生成高音（如 5 kHz 锯齿），做 FFT
-// 断言：所有非谐波峰（不属于 k*f0 的峰）都比基频低 > 60 dB
-
-// 测试 2：调音精度 —— 另一根支柱
-// 生成每个 MIDI 音符，用 FFT 测基频
-// 断言：|实测 - 理论| / 理论 < 0.1%（约 1.7 cent）
-// 这一条能抓出 Karplus-Strong 的相位延迟 bug
-
-// 测试 3：噪声频谱斜率（10 秒信号 + Welch 平均）
-// 粉噪声：-3 dB/oct（±0.5）；白噪声：0 dB/oct（±0.2）；布朗：-6 dB/oct（±0.5）
-
-// 测试 4：COLA 条件（在写粒子引擎之前就能验证窗函数定义）
-// Hann 窗、hop = L/2：断言对任意 n，所有覆盖 n 的窗之和 == 1.0（±1e-6）
-
-// 测试 5：包络到达时间
-// attack = 100 ms：断言达到最终值 99% 的时间在 100 ms ± 10% 内
-
-// 测试 6：稳定性（物理建模 / 反馈结构）
-// 喂一个脉冲跑 10 秒：断言不发散，且最终衰减到 < -80 dBFS
+// 1. 抗混叠（两根支柱之一）：生成 5 kHz 锯齿做 FFT
+//    断言所有非谐波峰（不属于 k*f0 的峰）都比基频低 > 60 dB
+// 2. 调音精度（另一根支柱）：每个 MIDI 音符用 FFT 测基频
+//    断言 |实测 - 理论| / 理论 < 0.1%（约 1.7 cent）
+//    这一条能抓出 Karplus-Strong 的相位延迟 bug
+// 3. 噪声频谱斜率（10 秒 + Welch 平均）
+//    粉噪声 -3 dB/oct（±0.5）；白噪声 0 dB/oct（±0.2）；布朗 -6 dB/oct（±0.5）
+// 4. COLA 条件（写粒子引擎之前就能验证窗函数定义）
+//    Hann 窗、hop = L/2：断言任意 n 处所有覆盖窗之和 == 1.0（±1e-6）
+// 5. 包络到达时间：attack = 100 ms 时，达到最终值 99% 的时间在 100 ms ± 10% 内
+// 6. 稳定性（物理建模/反馈结构）：喂脉冲跑 10 秒
+//    断言不发散，且最终衰减到 < -80 dBFS
 ```
 
 > [!tip] 测试 1 和 2 是最高杠杆的两个

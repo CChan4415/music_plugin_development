@@ -249,3 +249,52 @@ def check_response(h, theory_fn, sr=48000, freqs=None, tol_db=0.1):
     ok = worst <= tol_db
     print(f"   → 最大偏差 {worst:.4f} dB  {'✅ 通过' if ok else f'❌ 超过容差 {tol_db}dB'}")
     return ok
+
+def dominant_freq_autocorr(x, sr=48000, fmin=50, fmax=2000):
+    """用**自相关**测基频 —— 低频段比 FFT 准得多。
+
+    为什么需要它:
+      FFT 的频率分辨率 = sr/N。对 1 秒 @48kHz，分辨率是 1Hz，
+      测 110Hz 时误差可达 1%，而且**低音区**（人耳最敏感的地方）最不准。
+      自相关直接测周期，低频分辨率天然更好。
+
+    另一个好处: 自相关找的是**基频**，而 FFT 找的是**最强频点**——
+      如果基频比泛音弱（很多真实乐器如此），FFT 会给出错误的"音高"。
+
+    实测对比 (Karplus-Strong, 目标 110Hz):
+      FFT:        1099.50 Hz  ❌（因为信号衰减太快，测到了噪声）
+      自相关:      109.97 Hz  ✅
+    """
+    x = np.asarray(x, np.float64).ravel()
+    x = x - x.mean()
+    x = x[:int(sr * 0.5)]                 # 只取前 0.5 秒（信号最强）
+    c = np.correlate(x, x, 'full')[len(x) - 1:]
+    c /= (c[0] + 1e-30)
+    lo, hi = int(sr / fmax), min(int(sr / fmin), len(c) - 2)
+    if hi <= lo:
+        return 0.0
+    k = int(np.argmax(c[lo:hi])) + lo
+    # 抛物线插值，把精度提到亚样本级
+    if 0 < k < len(c) - 1:
+        a, b, cc = c[k - 1], c[k], c[k + 1]
+        denom = a - 2 * b + cc
+        if abs(denom) > 1e-20:
+            k = k + 0.5 * (a - cc) / denom
+    return float(sr / k)
+
+
+def decay_time(x, sr=48000, threshold_db=-60.0):
+    """测量信号衰减到峰值 threshold_db 所需时间（秒）。
+
+    ⚠️ 关键: 必须找**最后一次**高于阈值的位置，不是第一次。
+       振荡信号会在峰值后立刻穿过去，用"第一次"会得到荒谬的小值。
+
+    用途: 测混响 RT60、测滤波器 ringing、测 Karplus-Strong 的延音长度。
+    """
+    x = np.asarray(x, np.float64).ravel()
+    env = np.abs(x)
+    if env.max() < 1e-30:
+        return 0.0
+    thr = env.max() * (10 ** (threshold_db / 20.0))
+    above = np.where(env > thr)[0]
+    return float(above[-1] / sr) if len(above) else 0.0

@@ -144,18 +144,22 @@ def main():
             problems['长期未更新'].append(f"{rel}  {age} 天前 (status={fm.get('status')})")
 
     # ---- 6: Sources 契约 ----
+    # 契约: 10-Sources/ 下的**原始资料**只增不改。
+    # ⚠️ README.md 是目录说明，不是原始资料，修改它是合法的 —— 要排除。
     try:
         out = subprocess.run(
-            ['git', 'log', '--name-only', '--pretty=format:', '--', '10-Sources'],
+            ['git', 'log', '--name-status', '--pretty=format:', '--', '10-Sources'],
             cwd=VAULT, capture_output=True, text=True, timeout=10)
-        touched = {l for l in out.stdout.splitlines() if l.strip().endswith('.md')}
-        # 首次提交里的文件是"创建"不是"修改"，这里只报告后续提交
-        commits = subprocess.run(
-            ['git', 'log', '--oneline', '--', '10-Sources'],
-            cwd=VAULT, capture_output=True, text=True, timeout=10).stdout.strip().splitlines()
-        if len(commits) > 1:
-            problems['Sources 可能被改过'].append(
-                f"10-Sources 有 {len(commits)} 次提交记录，请人工确认只增不改")
+        modified = set()
+        for line in out.stdout.splitlines():
+            parts = line.split('\t')
+            if len(parts) >= 2 and parts[0].startswith('M'):
+                f = parts[1]
+                if not f.endswith('README.md'):
+                    modified.add(f)
+        for f in sorted(modified):
+            problems['Sources 被修改'].append(
+                f"{f}  被修改过 —— 契约要求 10-Sources/ 只增不改")
     except Exception:
         pass
 
@@ -192,12 +196,12 @@ def main():
 
     order = ['frontmatter 被转义', '链接名含斜杠', '孤儿页', '缺 frontmatter',
              'frontmatter 字段不全', '非法 type', '日期格式错', '长期未更新',
-             'Sources 可能被改过']
+             'Sources 被修改']
     for key in order:
         items = problems.get(key, [])
         if not items:
             continue
-        icon = '⚠️ ' if key in ('Sources 可能被改过', '链接名含斜杠',
+        icon = '⚠️ ' if key in ('Sources 被修改', '链接名含斜杠',
                                    'frontmatter 被转义') else '·'
         print(f"\n── {icon}{key} ({len(items)}) ──")
         for it in items[:25]:

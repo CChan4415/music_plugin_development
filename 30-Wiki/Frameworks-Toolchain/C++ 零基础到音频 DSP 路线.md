@@ -17,10 +17,7 @@ updated: 2026-10-14
 > 不存在"先打三个月基础"这种阶段——那种路线你已经知道自己会放弃。
 > 如果某个阶段结束时手上没有新东西可以听、可以看图、可以在 DAW 里加载，这个阶段的设计就是错的。
 
-**本页不从"什么是变量"讲起。** 它假设你已经有变量/循环/条件/函数/数组的概念、知道源码和编译是什么、能读懂别人的代码、会用 git 和命令行。缺的只有两样：
-
-1. **C++ 的语法** —— `&`、`const`、`::`、头文件、模板调用长什么样
-2. **C++ 的内存模型** —— 栈 vs 堆、对象在哪、谁负责释放、指针指向哪
+**本页不从"什么是变量"讲起。** 它假设你已经有变量/循环/条件/函数/数组的概念、知道源码和编译是什么、能读懂别人的代码、会用 git 和命令行。缺的只有两样：**C++ 的语法**（`&`、`const`、`::`、头文件、模板调用长什么样）和 **C++ 的内存模型**（栈 vs 堆、对象在哪、谁负责释放、指针指向哪）。
 
 > [!note] 你不是"零基础"，是"零 C++"
 > 这两者的路径完全不同。前者要从"程序是什么"开始，后者可以直接从"用 C++ 写一个能出声的东西"开始。
@@ -83,7 +80,6 @@ int main()
     std::cout << "peak = " << peakLevel (buf) << "\n";
 }
 ```
-```
 
 **产出**：上面这种程序，你能自己从零写出来并解释每一行。
 **怎么验证**：`clang++ -std=c++17 -Wall main.cpp -o main && ./main` 输出 `peak = 0.8`。加 `-Wall` 是硬要求——C++ 的警告里有大量真实的 bug 提示。
@@ -112,10 +108,7 @@ int main()
 
 **目标**：理解一个对象**在哪里**、**活多久**、**谁负责清理**。这是 Python/Java 背景的人唯一必须重新学习的部分。
 
-**为什么音频编程必须理解内存**：Python 里你从不问"这个数组在哪"。但在音频里，这个问题的答案决定了**插件会不会爆音**。
-
-- 数据在**栈（stack）**上 → 分配极快、自动回收，但空间小（通常几 MB），生命周期限于函数作用域
-- 数据在**堆（heap）**上 → 空间大、可跨函数存活，但分配要走系统调用，**耗时不可预测**
+**为什么音频编程必须理解内存**：Python 里你从不问"这个数组在哪"。但在音频里，这个问题的答案决定了**插件会不会爆音**。数据在**栈（stack）**上 → 分配极快、自动回收，但空间小（通常几 MB），生命周期限于函数作用域；数据在**堆（heap）**上 → 空间大、可跨函数存活，但分配要走系统调用，**耗时不可预测**。
 
 > [!important] 阶段 1 真正的产出不是"会用指针"
 > 而是**建立起"这块内存在哪"的本能**。因为 [[实时音频线程契约]] 的第一条禁令就是"音频线程里不能分配内存"——
@@ -130,11 +123,7 @@ int main()
 class RingBuffer
 {
 public:
-    void prepare (int capacitySamples)          // ⚠️ 只在这里分配内存
-    {
-        buffer.assign ((size_t) capacitySamples, 0.0f);
-        writePos = 0;
-    }
+    void prepare (int n) { buffer.assign ((size_t) n, 0.0f); writePos = 0; }  // ⚠️ 只在这里分配
 
     void write (float x)                        // ✅ 音频线程可安全调用：只读写
     {
@@ -145,7 +134,7 @@ public:
     float readDelayed (int delaySamples) const  // 0 = 最近写入的那个
     {
         int idx = writePos - 1 - delaySamples;
-        while (idx < 0) idx += (int) buffer.size();   // ⚠️ % 对负数返回负值
+        while (idx < 0) idx += (int) buffer.size();   // ⚠️ C++ 的 % 对负数返回负值
         return buffer[(size_t) idx];
     }
 
@@ -153,7 +142,6 @@ private:
     std::vector<float> buffer;      // 容量在 prepare 时定死，之后不变
     int writePos = 0;
 };
-```
 ```
 
 **怎么验证**：① 往 8 格缓冲区写 1..20，读 `readDelayed(3)` 应为 17，手算对照；② 故意写 `readDelayed(100)`（超容量），看它会不会崩——**理解为什么它不一定崩，比让它崩更重要**；③ 用 `-fsanitize=address` 重编译再跑，看越界有没有被抓到，见 [[AddressSanitizer]]。
@@ -189,7 +177,7 @@ static uint32_t readLE (std::ifstream& f, int n)
 }
 
 // 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部
-std::vector<float> readDataChunk (std::ifstream& f, uint32_t size, uint16_t bits)
+std::vector<float> readData (std::ifstream& f, uint32_t size, uint16_t bits)
 {
     std::vector<float> out (size / (bits / 8));
     for (size_t i = 0; i < out.size(); ++i)
@@ -197,10 +185,7 @@ std::vector<float> readDataChunk (std::ifstream& f, uint32_t size, uint16_t bits
         if (bits == 16)                     // int16 → float：除以 32768 → [-1, 1)
             out[i] = (float) (int16_t) readLE (f, 2) / 32768.0f;
         else if (bits == 32)                // 32-bit float：位模式即 IEEE-754
-        {
-            const uint32_t b = readLE (f, 4);
-            std::memcpy (&out[i], &b, 4);
-        }
+        { const uint32_t b = readLE (f, 4); std::memcpy (&out[i], &b, 4); }
     }
     return out;
 }
@@ -229,14 +214,13 @@ WavData loadWav (const std::string& path)
             out.bitsPerSample = (uint16_t) readLE (f, 2);
         }
         else if (tag == "data")
-            out.samples = readDataChunk (f, size, out.bitsPerSample);
+            out.samples = readData (f, size, out.bitsPerSample);
 
         // 跳到 chunk 末尾；size 为奇数时有一个补齐字节，这是 WAV 的硬规定
         f.seekg (chunkStart + (std::streamoff) size + (std::streamoff) (size & 1));
     }
     return out;
 }
-```
 ```
 
 **产出**：一个命令行程序 `gain in.wav out.wav -6`，把音量降低 6 dB 并写出新文件。
@@ -250,7 +234,6 @@ int16_t toPcm16 (float x)
     return (int16_t) std::lround (x * 32767.0f);
 }
 ```
-```
 
 **怎么验证**：用 Python 对照读两个文件，确认峰值比正好是 -6 dB。
 
@@ -260,7 +243,6 @@ from scipy.io import wavfile
 
 fs, x = wavfile.read("in.wav")       # 单声道示例
 fs2, y = wavfile.read("out.wav")
-
 ratio_db = 20 * np.log10(np.abs(y).max() / np.abs(x).max())
 print(f"实测增益 = {ratio_db:.2f} dB")            # 应约等于 -6.02
 assert abs(ratio_db + 6.0) < 0.1, "增益不对，或钳制出问题了"
@@ -298,9 +280,7 @@ class OnePole
 {
 public:
     void setCutoff (float cutoffHz, float sampleRate)
-    {
-        a = 1.0f - std::exp (-2.0f * 3.14159265f * cutoffHz / sampleRate);
-    }
+    { a = 1.0f - std::exp (-2.0f * 3.14159265f * cutoffHz / sampleRate); }
     float process (float x) { y += a * (x - y); return y; }   // 一次乘加，极省 CPU
 private:
     float a = 0.0f, y = 0.0f;
@@ -315,7 +295,6 @@ float readFractional (const RingBuffer& rb, float delaySamples)
     const float a = rb.readDelayed (i0), b = rb.readDelayed (i0 + 1);
     return a + frac * (b - a);                  // 线性插值
 }
-```
 ```
 
 > [!important] 从阶段 3 开始，参数必须平滑
@@ -379,10 +358,9 @@ private:
     juce::SmoothedValue<float> smoothedGain;
 };
 ```
-```
 
 > [!warning] 这段代码里有两个新手必踩的坑
-> 1. `processBlock` 第一行不判断 `numSamples == 0` → 某些宿主会给空 block
+> 1. `processBlock` 第一行不判断 `n == 0` → 某些宿主会给空 block
 > 2. 把 `getNextValue()` 写进**声道循环内部** → 平滑器每个声道各推进一次，左右声道得到不同增益，声像漂移。**平滑器每采样只能推进一次。**
 >
 > 另外：`AudioParameterFloat` 的第一个参数在较新的 JUCE 里是 `juce::ParameterID { "id", versionHint }`，老版本接受裸字符串。以你锁定的 release tag 的文档为准。

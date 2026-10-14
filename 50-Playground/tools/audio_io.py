@@ -298,3 +298,21 @@ def decay_time(x, sr=48000, threshold_db=-60.0):
     thr = env.max() * (10 ** (threshold_db / 20.0))
     above = np.where(env > thr)[0]
     return float(above[-1] / sr) if len(above) else 0.0
+
+# ---------------- 窗函数（注意对称 vs 周期性）----------------
+
+def hann_periodic(n):
+    """**周期性** Hann 窗 —— 用于重叠相加（OLA），满足 COLA。
+
+    ⚠️ 和 numpy.hanning() 不是同一个东西！
+       np.hanning(N) 是对称版（分母 N-1），两端都是 0，**不满足 COLA**。
+       本函数分母是 n，满足 w[k] + w[k+n/2] = 1（50% 重叠时）。
+
+    实测:
+       np.hanning(1024)         → max|w[k]+w[k+512]-1| = 1.5e-3   ❌
+       hann_periodic(1024)      → max|w[k]+w[k+512]-1| = 4.4e-16  ✅
+
+    用途: 粒子合成、STFT、重叠相加。
+    滤波器设计请用对称版（np.hanning）。
+    """
+    return 0.5 * (1.0 - np.cos(2.0 * np.pi * np.arange(n) / n))

@@ -53,7 +53,7 @@ updated: 2026-10-14
 ## 阶段 0：C++ 的最小可用子集
 
 **目标**：能用 C++ 写一个完整的、能编译运行的命令行程序。不求优雅，只求闭环。
-**学什么**：编译运行流程（源码 → 目标文件 → 可执行文件）；基本类型 `int`/`float`/`double`/`bool`；函数（声明、定义、参数、返回值）；`std::vector<float>`；引用 `&` 与 `const`；类的最基本用法（成员变量 + 成员函数 + 构造函数）；`#include` 与头文件的作用。
+**学什么**：编译运行流程（源码 → 目标文件 → 可执行文件）；基本类型 `int`/`float`/`double`/`bool`；函数（声明、定义、参数、返回值）；`std::vector<float>`；引用 `&` 与 `const`；类的最基本用法；`#include` 与头文件的作用。
 
 ```cpp
 #include <algorithm>
@@ -130,17 +130,9 @@ private:
 struct WavData { std::vector<float> samples; uint32_t sampleRate = 0;
                  uint16_t numChannels = 0, bitsPerSample = 0; };
 
-// 逐字节读最稳 —— 直接 read 进结构体会被编译器插入的 padding 搞错字段位置
-static uint32_t readLE (std::ifstream& f, int n)   // 读 n 字节，按小端拼成整数
-{
-    unsigned char b[4] = { 0, 0, 0, 0 };
-    f.read (reinterpret_cast<char*> (b), n);
-    uint32_t v = 0;
-    for (int i = 0; i < n; ++i) v |= (uint32_t) b[i] << (8 * i);
-    return v;
-}
-
-// 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部
+// readLE(f, n)：读 n 字节、按小端拼成整数（自己写，10 行以内）。
+// 逐字节读最稳 —— 直接 read 进结构体会被编译器插入的 padding 搞错字段位置。
+// 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部。
 WavData loadWav (const std::string& path)
 {
     std::ifstream f (path, std::ios::binary);   // ⚠️ 永远加 binary
@@ -254,7 +246,7 @@ float readFractional (const RingBuffer& rb, float d)          // 见 [[插值]]
 
 **目标**：**一个能在 DAW 里加载并出声的插件。** 前置条件：阶段 3 的 5 个模块你都能自己写、能解释、能验证——达不到就回去补，**在 JUCE 里调试 DSP 比在命令行里难十倍**。
 
-**学什么**：JUCE 项目结构（`PluginProcessor` + `PluginEditor` 的分工，见 [[JUCE 的架构与模块划分]]）；`AudioProcessor` 生命周期（构造 → `prepareToPlay` → `processBlock` × N → `releaseResources`）；`AudioBuffer<float>`（注意它是**分离声道**而非交错）；CMake 构建（见 [[JUCE 的 CMake API]]、[[CMake 插件项目结构]]）；Standalone 模式（**调试利器**，不用开 DAW 就能测）。
+**学什么**：JUCE 项目结构（见 [[JUCE 的架构与模块划分]]）；`AudioProcessor` 生命周期（构造 → `prepareToPlay` → `processBlock` × N → `releaseResources`）；`AudioBuffer<float>`（注意它是**分离声道**而非交错）；CMake 构建（见 [[JUCE 的 CMake API]]、[[CMake 插件项目结构]]）；Standalone 模式（**调试利器**，不用开 DAW 就能测）。
 
 ```cpp
 class MyFirstProcessor : public juce::AudioProcessor
@@ -277,11 +269,9 @@ public:
         if (n == 0) return;                             // ⚠️ 合法情况，别漏
         smoothedGain.setTargetValue (juce::Decibels::decibelsToGain (gainDb->get()));
         for (int i = 0; i < n; ++i)
-        {
-            const float g = smoothedGain.getNextValue();  // 每采样只推进一次
+        {   const float g = smoothedGain.getNextValue();  // 每采样只推进一次
             for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-                buffer.getWritePointer (ch)[i] *= g;
-        }
+                buffer.getWritePointer (ch)[i] *= g; }
     }
 private:
     juce::AudioParameterFloat* gainDb = nullptr;
@@ -301,7 +291,7 @@ private:
 
 ## 阶段 5：加上 GUI 和参数
 
-**目标**：插件有旋钮、能被宿主自动化、关掉工程再打开参数还在。**学什么**：参数系统 `AudioParameterFloat` / `AudioProcessorValueTreeState`（见 [[参数自动化与线程安全]]）；参数范围与曲线（**频率参数必须用对数映射**，否则旋钮手感全错，见 [[MOC - UI & UX]]）；旋钮控件 `juce::Slider` 与 `SliderAttachment`（见 [[JUCE 的 Slider 与旋钮]]）；状态保存与恢复 `getStateInformation` / `setStateInformation`（见 [[状态保存与恢复]]）；界面布局 `resized()` + `FlexBox`/`Grid`（见 [[JUCE Component 体系]]）。
+**目标**：插件有旋钮、能被宿主自动化、关掉工程再打开参数还在。**学什么**：参数系统 `AudioParameterFloat` / `AudioProcessorValueTreeState`（见 [[参数自动化与线程安全]]）；参数范围与曲线（**频率参数必须用对数映射**，见 [[MOC - UI & UX]]）；`juce::Slider` 与 `SliderAttachment`（见 [[JUCE 的 Slider 与旋钮]]）；`getStateInformation` / `setStateInformation`（见 [[状态保存与恢复]]）；布局 `resized()` + `FlexBox`/`Grid`（见 [[JUCE Component 体系]]）。
 
 > [!important] 参数设计是你的主场
 > 你在合成器上拧了十年旋钮，你知道**什么范围、什么默认值、什么曲线是对的**。
@@ -381,8 +371,7 @@ private:
 | **浮点精度 / 越界** | `float` 只有约 7 位有效数字——**滤波器内部状态、长时间累加用 `double`**。`std::vector::operator[]` **不做边界检查**，调试时用 `.at()` 或 ASan；绝不假设"它没崩就是对的" |
 | **头文件与实现分离** | 两条：**声明放 `.h`，定义放 `.cpp`**；头文件里只放 `inline` 函数和类定义 |
 | **构建系统** | 抄一个能用的模板改路径和文件名，**别从零写 CMakeLists**。见 [[CMake 基础]] |
-| **符号约定不统一** | 不同资料的差分方程符号约定不同，抄公式前先确认，见 [[Biquad 滤波器]] |
-| **`int` 与 `size_t` 混用** | `size_t` 无符号，`for (int i = v.size() - 1; i >= 0; --i)` 是经典死循环陷阱 |
+| **符号约定 / 类型混用** | 不同资料的差分方程符号约定不同，抄公式前先确认（见 [[Biquad 滤波器]]）；`size_t` 无符号，`for (int i = v.size() - 1; i >= 0; --i)` 是死循环陷阱 |
 | **Debug 能跑，Release 崩** | 未定义行为（UB）的典型特征。**UB 不是"随机"，是"编译器可以随便处理"**，见 [[UndefinedBehaviorSanitizer]] |
 | **插件在宿主里行为不同** | 先把同一个二进制当 Standalone 跑，分流"宿主交互问题"还是"DSP 问题" |
 | **改一个参数就爆音** | 参数平滑，见 [[参数平滑 parameter smoothing]] |
@@ -394,8 +383,7 @@ private:
 > |---|---|
 > | **能编译、能出声、但逻辑错** | 比如 Biquad 的 `A = 10^(dB/40)` 写成 `/20`——声音"有变化"，听起来"像那么回事"，但增益差一倍。**没有对照基准就发现不了** |
 > | **违反实时契约** | AI 默认写出"教科书 C++"：`std::vector::push_back`、`std::mutex`、`std::string`、`printf`。这些在普通程序里完全正确，在 [[实时音频线程契约]] 里全是禁忌。它**不会主动告诉你** |
-> | **用你听不懂的写法 / 接口是编的** | 模板、lambda 捕获、`auto&&`——代码能跑，但你改不动也 debug 不了；或者方法名看着完全合理，实际不存在或签名不对，你会在编译错误里耗掉半天 |
-> | **过度设计** | 你要一个增益，它给你一个带策略模式的 `GainProcessorFactory` |
+> | **用你听不懂的写法 / 接口是编的 / 过度设计** | 模板、lambda 捕获、`auto&&`——代码能跑，但你改不动也 debug 不了；方法名看着合理但根本不存在；你要一个增益，它给你一个带策略模式的 `GainProcessorFactory` |
 >
 > **防御办法**（缺一不可）：① **每一行都要能解释**，解释不了的行删掉重写，或让 AI 逐行讲解到你能复述；② **让它遵守 [[实时音频线程契约]]**，提示词里明确写"音频线程内不得分配、加锁、打日志、抛异常"；③ **用测试验证而不是用编译验证**——"能编译"和"能出声"都不是正确性证据；④ **DSP 核心逻辑自己写**（见下一节）；⑤ **查 API 是否存在**，编译一次就知道，别在脑子里推理。
 > 更完整的清单见 [[AI 生成代码的审查清单]]、[[为什么 AI 写不好实时音频代码]]。

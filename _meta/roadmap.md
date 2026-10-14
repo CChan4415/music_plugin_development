@@ -51,19 +51,29 @@ tags: [todo]
 
 ## 阶段 0：先修环境（半天）
 
-你现在这台机器**没有 DAW、没有插件、没有音频接口**（只有 GarageBand）。
+你现在这台机器：**macOS 26.6.2 / arm64 / 无 DAW / 无插件**（Ableton 下载中）。
 
 - [ ] **装一个能测插件的 DAW**（必须做，否则后面无法验证）
-      - 免费：GarageBand（已装，支持 AU）
-      - 强烈推荐：**REAPER**（有无限试用期，是插件开发者最常用的测试宿主，支持 VST3/AU/CLAP，报错信息最清晰）
-      - 你有 rekordbox，但它是 DJ 软件，**不支持插件**，用不了
-- [ ] 装 CMake：`brew install cmake`（阶段 4 才需要，可以先不装）
+      - **Ableton Live**（你已下载，支持 VST3 + AU）—— 你熟悉它，主力用它
+      - **建议加装 REAPER** —— 插件开发者的事实标准测试宿主，
+        支持所有格式、报错最清晰、60 天全功能免费评估、个人授权 $60
+      - ❌ rekordbox 是 DJ 软件，**不支持插件**
+- [ ] 装 CMake：`brew install cmake`（**阶段 4 才需要**，现在别装）
 - [ ] 确认 Python 环境能画图（见阶段 1）
 - [ ] 确认音频输出正常（耳机/音箱）
 
 > [!note] 为什么先装 DAW
 > 因为**从第一天起，你就要有"最终产物长什么样"的具体印象**。
 > 没见过插件在 DAW 里的样子，你学 DSP 时是悬空的。
+
+> [!important] 你的跨平台决定（2026-10-14）
+> 你说了"以后肯定要兼容 windows，可以从第一天就考虑兼容性"。
+> **这个决定改变了阶段 4 的做法**：
+> - ✅ 用 **CMake**，不要用 Projucer 生成 Xcode 工程
+> - ✅ 第一天就配 **GitHub Actions** 双平台编译
+> - ✅ 文件名大小写严格一致（这是 Mac 开发者的头号陷阱）
+>
+> 详见 [[跨平台开发 macOS 与 Windows]]。**这些在阶段 1–3 不花钱，到阶段 4 才开始有影响。**
 
 ---
 
@@ -168,7 +178,12 @@ tags: [todo]
 
 **到这一步才碰框架**。此时你已经懂了 DSP，JUCE 只是"包装"。
 
-- [ ] JUCE 项目结构 + CMake
+> [!warning] 跨平台从这一步开始收费
+> 前面三个阶段跨平台是"免费"的（纯 C++ 代码注意类型宽度和大小写就行）。
+> 从 JUCE 开始要注意：CMake 配置、插件安装路径、代码签名——
+> 两个平台是两套流程。见 [[跨平台开发 macOS 与 Windows]]。
+
+- [ ] JUCE 项目结构 + CMake（**用 FetchContent 锁定 JUCE tag**）
 - [ ] `AudioProcessor` 生命周期：`prepareToPlay` / `processBlock` / `releaseResources`
 - [ ] **精读 [[实时音频线程契约]]**（这一步之前看不懂是正常的，现在能看懂了）
 - [ ] 参数系统（`AudioProcessorValueTreeState`）

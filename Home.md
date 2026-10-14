@@ -13,9 +13,11 @@ tags: [moc]
 ## 我是谁（决定这个库长什么样）
 
 - 前电子音乐制作人：加法/减法/粒子/模块合成器，压缩/EQ/混响/flanger
+- 主要做**电子音乐**（不只是四四拍，也有 **2step**）—— 重视律动与摇摆
 - 计算机专业：会编程（Python 等），**但 C++ 基本为 0**
 - DSP 数学：基本忘了，**但线性代数没问题**
-- 目标：用 C++ 做 VST3/AU 插件，AI 当开发助手
+- 目标：**先做效果器**，用 C++ 做 VST3/AU 插件；**macOS 起步，但必须兼容 Windows**
+- 以前在 **Windows** 上做音乐，现在换到 macOS
 
 > [!important] 这个库的核心策略（2026-10-14 确定）
 > 你的瓶颈**不是"不会做插件"，是"同时从零学 C++ 和 DSP 数学"**——两样一起学，难度相乘。
@@ -34,6 +36,7 @@ tags: [moc]
 | ⚡ 实时工程 | 音频线程契约、无锁、SIMD、性能 | [[MOC - Realtime Engineering]] |
 | 🔌 插件格式 | VST3 / AU / CLAP / AAX、宿主兼容 | [[MOC - Plugin Formats]] |
 | 🏗️ 框架与工具链 | JUCE、CMake、构建、签名、CI | [[MOC - Frameworks & Toolchain]] |
+| 🖥️ 跨平台 | macOS / Windows 差异、CI 双平台编译 | [[跨平台开发 macOS 与 Windows]] |
 | 🎨 界面与交互 | 参数设计、表头、缩放、音乐人思维 | [[MOC - UI & UX]] |
 | 🎼 音乐声学 | 心理声学、乐器声学、混音惯例 | [[MOC - Music & Acoustics]] |
 | 🤖 AI 音频 | 神经建模、可微 DSP、实时推理 | [[MOC - AI Audio]] |

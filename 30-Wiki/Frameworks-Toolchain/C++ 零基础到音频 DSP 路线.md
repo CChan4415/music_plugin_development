@@ -130,10 +130,19 @@ private:
 **学什么**：RIFF / WAVE 容器结构（`RIFF` 头 + 一串 chunk：`fmt `、`data`，可能还有 `LIST`/`fact`）；**小端（little-endian）**字节序；位深（bit depth）与 `[-1, 1]` 浮点的映射；交错（interleaved）存储 `L R L R ...`；浮点转 `int16` 前**必须钳制**，否则整数回绕成巨大噪声。
 
 ```cpp
-// readLE(f, n)：逐字节读 n 字节、按小端拼成整数（自己写，10 行以内）。
-// 逐字节读最稳 —— 直接 read 进结构体会被编译器插入的 padding 搞错字段位置。
 struct WavData { std::vector<float> samples; uint32_t sampleRate = 0;
                  uint16_t numChannels = 0, bitsPerSample = 0; };
+
+// 逐字节读最稳 —— 直接 read 进结构体会被编译器插入的 padding 搞错字段位置。
+// WAV 一律小端。
+static uint32_t readLE (std::ifstream& f, int n)
+{
+    unsigned char b[4] = { 0, 0, 0, 0 };
+    f.read (reinterpret_cast<char*> (b), n);
+    uint32_t v = 0;
+    for (int i = 0; i < n; ++i) v |= (uint32_t) b[i] << (8 * i);
+    return v;
+}
 
 // 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部
 WavData loadWav (const std::string& path)

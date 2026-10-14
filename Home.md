@@ -40,7 +40,8 @@ tags: [moc]
 
 ## 快速通道
 
-- 🚦 **刚开始？** → [[_meta/roadmap|开发路线图]]
+- 🚀 **第一次来？** → [[_meta/START-HERE|从这里开始]]
+- 🚦 **开发路线图** → [[_meta/roadmap|开发路线图]]
 - ❓ **待确认的问题** → [[_meta/open-questions|待确认清单]]
 - 📥 **有新材料** → 丢进 `00-Inbox/`，然后让 Agent 处理
 - 🤖 **Agent 怎么工作** → [[AGENTS|维护契约]]

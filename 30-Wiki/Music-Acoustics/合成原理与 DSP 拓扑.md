@@ -35,15 +35,8 @@ updated: 2026-10-14
 
 理想锯齿波有**无限多个**谐波。48 kHz 下奈奎斯特频率是 24 kHz，
 1000 Hz 锯齿波的第 25 次以上谐波全部越界——**它们不会消失，会折叠回可听频段**，
-变成和基频**不成谐波关系**的成分。
-
-| 波形 | 谐波衰减 | 混叠听感 |
-|---|---|---|
-| 正弦 | 只有一个谐波 | 无 |
-| 三角 | −12 dB/oct | 轻微 |
-| 方波 | −6 dB/oct（奇次） | 明显，"沙沙"的金属声 |
-| 锯齿 | −6 dB/oct（全谐波） | **最严重** |
-
+变成和基频**不成谐波关系**的成分。谐波衰减越慢的波形越严重（正弦无、三角 −12 dB/oct 轻微、
+方波 −6 dB/oct 奇次明显、**锯齿 −6 dB/oct 全谐波最严重**）。
 **高音区最严重**：基频越高，越界的谐波越多，折回来的成分也越靠近可听区。
 
 | 解法 | 思路 | 代价 |
@@ -94,8 +87,7 @@ $$y[n] = \frac{H_{\text{forward}}(x[n])}{1 + k \cdot H_{\text{feedback}}}$$
 $$y(t) = \sum_{k=1}^{N} a_k \sin\!\big(2\pi k f_0 t + \varphi_k\big)$$
 
 直接指定每个谐波的幅度 $a_k$ 和相位 $\varphi_k$——傅里叶级数就是这个公式。
-
-**计算成本**：32 个部分 × 8 复音 = 256 个振荡器 × 每采样一次正弦 → 灾难。解法：
+**计算成本是主要障碍**：32 个部分 × 8 复音 = 256 个振荡器 × 每采样一次正弦 → 灾难。
 
 | 解法 | 思路 | 代价 |
 |---|---|---|
@@ -176,19 +168,12 @@ float fmSample (FmOperator& c, FmOperator& m, float cHz, float mHz, float index)
 { return c.process (cHz, index * m.process (mHz, 0.0f)); }
 ```
 
-### 难点：FM 极易混叠
-
-**Carson 带宽法则**：$\text{BW} \approx 2(I + 1) f_m$。
+**难点：FM 极易混叠。** **Carson 带宽法则**：$\text{BW} \approx 2(I + 1) f_m$。
 PM 产生位于 $f_c \pm n f_m$ 的**边带**，幅度由贝塞尔函数 $J_n(I)$ 决定；$I$ 越大边带越多。
-
-| 例子 | 带宽 | 对比奈奎斯特 24 kHz |
-|---|---|---|
-| $f_c$=2 kHz, $f_m$=1 kHz, $I$=10 | 22 kHz | **已经贴边** |
-| $f_c$=1 kHz, $f_m$=500 Hz, $I$=5 | 6 kHz | 安全 |
+例：$f_c$=2 kHz、$f_m$=1 kHz、$I$=10 → BW = 22 kHz，**已经贴住 24 kHz 的奈奎斯特**。
 
 风险最高的是：高 $I$（"金属"音色）、高 $f_m$（"铃声"音色）、**高音区演奏**（基频已高，边带立刻越界）、
 以及算子反馈 FM（产生噪声状宽带谱）。
-
 **解法**：过采样（2×–8×，FM 是非线性过程，过采样是**必需品**而非优化）；
 限制 $I$ 随音高下降（很多经典 FM 合成器就这么做）；调制器本身要用带限波形。
 
@@ -258,9 +243,7 @@ $w$ = 窗函数，$n_i$ = 粒子起始时刻，$r_i$ = 播放速率（音高）�
 | **Stereo Spread** | 每粒子声像 | 宽度 | 每声道独立随机 → mono 兼容性下降 |
 | **Rate Sync** | $D$ 与 BPM | 颗粒感对齐节拍 | 从宿主取 transport |
 
-### 窗函数与重叠相加
-
-用 **Hann 窗**、50% 重叠（hop = $L/2$）时，**对所有 $n$**：
+**窗函数与重叠相加**：用 **Hann 窗**、50% 重叠（hop = $L/2$）时，**对所有 $n$**：
 $w[n] + w[n + L/2] = 1.0$——重叠相加恰好等于 1，输出幅度恒定。
 这是 [[重叠相加 overlap-add]] 的 **COLA**（constant overlap-add）条件。
 
@@ -280,15 +263,11 @@ inline float hann (int i, int L)
 > **设计决策**：要么绑定 density 与 grain size 保证重叠 ≥ 2，
 > 要么重叠不足时自动补偿增益，要么明确告诉用户这是"颗粒感"特性。
 
-### 为什么粒子合成特别容易出问题
-
-| 问题 | 原因 |
-|---|---|
-| **混叠（来源 1）** | $r \ne 1$ 播放粒子 = 重采样，源素材高频被折叠 |
-| **混叠（来源 2）** | 粒子窗本身是**快速幅度调制** → 产生边带，边带可越界 |
-| **相位不连续** | 相邻粒子取自源素材不同位置，接缝处相位随机 |
-| **峰值堆积** | 多个粒子波峰同时出现 → 输出峰值远高于平均电平 → 削波 |
-| **CPU** | 每粒子独立读取 + 窗 + 插值，随粒子数线性增长 |
+**为什么粒子合成特别容易出问题**：① **混叠来源一**——$r \ne 1$ 播放粒子就是重采样，
+源素材高频被折叠；② **混叠来源二**——粒子窗本身是**快速幅度调制**，产生的边带可越界；
+③ **相位不连续**——相邻粒子取自源素材不同位置，接缝处相位随机；
+④ **峰值堆积**——多个粒子波峰同时出现，输出峰值远高于平均电平 → 削波；
+⑤ **CPU** 随粒子数线性增长（每粒子独立读取 + 窗 + 插值）。
 
 > [!important] "失去音高感"在粒子合成里是特性，不是 bug
 > 位置随机化（spray）破坏了粒子间的相位关系，而**相位关系是音高感知的基础之一**。
@@ -349,10 +328,10 @@ $$f_0 = \frac{f_s}{N + \phi_{\text{filter}}(f_0)}$$
 > 你听到的只是"音有点不准"，于是会去查 MIDI 音高换算、采样率、A4=440 还是 432——
 > **全都是对的，问题在环路滤波器的相位延迟上。**
 > 验证方法：FFT 测实际基频，对比 $f_s/N$，差值就是相位延迟。
-
-**延伸**：Karplus-Strong 是**数字波导（digital waveguide）**的最简形式。
-完整波导用**两条延迟线**表示两个方向传播的波，可以模拟管的开孔（接分支）、
-吹奏（非线性激励）、鼓面（二维网格）、人声（波导 + 共振峰）。**它是物理建模的通用语言。**
+>
+> **延伸**：Karplus-Strong 是**数字波导（digital waveguide）**的最简形式。
+> 完整波导用**两条延迟线**表示两个方向传播的波，可以模拟管的开孔（接分支）、
+> 吹奏（非线性激励）、鼓面（二维网格）、人声（波导 + 共振峰）。**它是物理建模的通用语言。**
 
 ---
 
@@ -413,17 +392,9 @@ struct PinkNoise
     }
 };
 
-// 布朗噪声：有泄漏的积分（漏积分器）
-struct BrownNoise
-{
-    Rng rng; float state = 0.0f;
-    void prepare (std::uint32_t seed) { rng.prepare (seed); state = 0.0f; }
-    float process()
-    {
-        state = 0.99f * state + 0.05f * rng.next();   // leak<1：防直流漂移累积
-        return state * 4.0f;                          // 补偿幅度损失
-    }
-};
+// 布朗噪声：有泄漏的积分。leak < 1 是为了防止直流漂移无限累积
+float brownNext (Rng& rng, float& state)
+{ state = 0.99f * state + 0.05f * rng.next(); return state * 4.0f; }  // ×4 补偿幅度
 ```
 
 > [!note] 一个更省 CPU 的粉噪声做法
@@ -462,28 +433,19 @@ $$y(t) = y_{\text{target}} + (y_{\text{start}} - y_{\text{target}}) \cdot e^{-t/
 
 ```cpp
 // 指数包络：关键技巧是内部目标值要**超过**最终值，才能在指定时间内到达
-class ExpEnvelope
+void startSegment (float start, float final, float timeSec, float curve)
 {
-public:
-    void prepare (double sr) { sampleRate = (float) sr; }
+    current = start;
+    const float tau = timeSec / curve;              // curve ≈ 4.6 时接近"4.6τ 到达"
+    coeff = 1.0f - std::exp (-1.0f / (sampleRate * tau));
 
-    void startSegment (float start, float final, float timeSec, float curve)
-    {
-        current = start;
-        const float tau = timeSec / curve;              // curve ≈ 4.6 时接近"4.6τ 到达"
-        coeff = 1.0f - std::exp (-1.0f / (sampleRate * tau));
+    // 反解过冲目标：使 y 在 timeSec 后恰好等于 final
+    // y(t) = target + (start - target) * k,  k = exp(-T/tau)
+    const float k = std::exp (-timeSec / tau);
+    target = (k < 0.9999f) ? (final - k * start) / (1.0f - k) : final;
+}
 
-        // 反解过冲目标：使 y 在 timeSec 后恰好等于 final
-        // y(t) = target + (start - target) * k,  k = exp(-T/tau)
-        const float k = std::exp (-timeSec / tau);
-        target = (k < 0.9999f) ? (final - k * start) / (1.0f - k) : final;
-    }
-
-    float next() { current += (target - current) * coeff; return current; }
-
-private:
-    float current = 0.0f, target = 0.0f, coeff = 0.01f, sampleRate = 48000.0f;
-};
+float next() { current += (target - current) * coeff; return current; }  // 每采样调用
 ```
 
 > [!warning] 指数包络的"永远到不了"与过冲陷阱
@@ -509,12 +471,9 @@ private:
 > 这就是 chorus 变宽的原理。**代价是单声道兼容性**——
 > 见 [[立体声感知]]、[[调制效果]]、[[拍频与失谐]]。
 > **设计决策**：给用户一个 "stereo width" 参数，默认不要拉满。
-
-> [!warning] LFO 不能直接加到任何参数上
-> - 加到**延迟时间** → 故意要的多普勒（chorus 就是靠这个）
-> - 加到**滤波器系数** → 必须每采样更新系数，否则有"阶梯感"
-> - 加到**增益** → 相对安全
 >
+> **LFO 不能随便加到任何参数上**：加到**延迟时间** → 故意要的多普勒（chorus 就靠这个）；
+> 加到**滤波器系数** → 必须每采样更新系数，否则有"阶梯感"；加到**增益** → 相对安全。
 > 见 [[参数平滑 parameter smoothing]]。
 
 ---

@@ -55,14 +55,12 @@ updated: 2026-10-14
 ---
 
 ## 阶段 0：C++ 的最小可用子集
-
 **目标**：能用 C++ 写一个完整的、能编译运行的命令行程序。不求优雅，只求闭环。
 
 **学什么**：编译运行流程（源码 → 目标文件 → 可执行文件）；基本类型 `int`/`float`/`double`/`bool`；函数（声明、定义、参数、返回值）；`std::vector<float>`；引用 `&` 与 `const`；类的最基本用法（成员变量 + 成员函数 + 构造函数）；`#include` 与头文件的作用。
 
 ```cpp
 #include <algorithm>
-#include <iostream>
 #include <vector>
 
 // const 引用：不拷贝、也不许改 —— 音频代码里传缓冲区的标准姿势
@@ -73,16 +71,9 @@ float peakLevel (const std::vector<float>& buffer)
         peak = std::max (peak, (x < 0.0f) ? -x : x);
     return peak;
 }
-
-int main()
-{
-    std::vector<float> buf { 0.1f, -0.8f, 0.3f };
-    std::cout << "peak = " << peakLevel (buf) << "\n";
-}
 ```
-
-**产出**：上面这种程序，你能自己从零写出来并解释每一行。
-**怎么验证**：`clang++ -std=c++17 -Wall main.cpp -o main && ./main` 输出 `peak = 0.8`。加 `-Wall` 是硬要求——C++ 的警告里有大量真实的 bug 提示。
+**产出**：你能自己从零写出这种程序，并解释每一行（含一个 `main` 把它跑起来）。
+**怎么验证**：`clang++ -std=c++17 -Wall main.cpp -o main && ./main` 打印 `peak = 0.8`。加 `-Wall` 是硬要求——C++ 的警告里有大量真实的 bug 提示。
 
 > [!important] 明确列出：这些现在**不用学**
 > 这条比"学什么"更重要。零基础的人 90% 的时间浪费在这里。
@@ -90,13 +81,11 @@ int main()
 > **什么时候再碰**：模板与智能指针在阶段 4 读 JUCE 源码时被动遇到；移动语义在阶段 3 之后关心拷贝开销时；并发与原子操作配合 [[SPSC 队列]] 学；其余长期不用。
 >
 > **判据**：如果一个特性在"读一段音频处理代码"时不会挡路，就推迟它。
-
-**耗时与卡点**：15–25 小时；超过 35 小时还在原地，说明你在啃上面那张"暂时跳过"表——**回去写代码**。常见卡点：装不上编译器 → 用 Xcode Command Line Tools 就够，见 [[MOC - Frameworks & Toolchain]]；分不清 `.h` 和 `.cpp` → 先记住"声明放头文件、定义放源文件"；`#include <>` 与 `#include ""` 的区别 → 尖括号找系统路径，引号先找当前目录。
+**耗时与卡点**：15–25 小时；超过 35 小时还在原地，说明你在啃上面那张"暂时跳过"表——**回去写代码**。装不上编译器 → 用 Xcode Command Line Tools 就够，见 [[MOC - Frameworks & Toolchain]]；分不清 `.h` 和 `.cpp` → 先记住"声明放头文件、定义放源文件"；`#include <>` 与 `#include ""` 的区别 → 尖括号找系统路径，引号先找当前目录。
 
 ---
 
 ## 阶段 1：指针与内存（C++ 的真正门槛）
-
 **目标**：理解一个对象**在哪里**、**活多久**、**谁负责清理**。这是 Python/Java 背景的人唯一必须重新学习的部分。
 
 **为什么音频编程必须理解内存**：Python 里你从不问"这个数组在哪"。但在音频里，这个问题的答案决定了**插件会不会爆音**。数据在**栈（stack）**上 → 分配极快、自动回收，但空间小（通常几 MB），生命周期限于函数作用域；数据在**堆（heap）**上 → 空间大、可跨函数存活，但分配要走系统调用，**耗时不可预测**。
@@ -105,8 +94,7 @@ int main()
 > 而是**建立起"这块内存在哪"的本能**。因为 [[实时音频线程契约]] 的第一条禁令就是"音频线程里不能分配内存"——
 > 如果你连"这一行会不会分配"都判断不出来，那条契约对你就是一句空话。
 
-**学什么**：指针 `T*` 与取地址 `&`；栈 vs 堆（局部变量在栈上，`new` 和 `std::vector` 的元素在堆上）；C 数组 `float buf[512]` 会退化成指针、**不知道自己的长度**（无数越界 bug 的源头）；`std::vector` 的扩容行为（`push_back` 可能触发重新分配 → 音频线程禁用）；越界访问与段错误（不一定立刻崩，可能静默破坏别的数据）；`nullptr`。
-
+**学什么**：指针 `T*` 与取地址 `&`；栈 vs 堆；C 数组 `float buf[512]` 会退化成指针、**不知道自己的长度**（无数越界 bug 的源头）；`std::vector` 的扩容行为（`push_back` 可能触发重新分配 → 音频线程禁用）；越界访问与段错误（不一定立刻崩，可能静默破坏别的数据）；`nullptr`。
 **产出**：一个自己实现的**环形缓冲区（ring buffer）**。
 
 ```cpp
@@ -117,10 +105,7 @@ public:
     void prepare (int n) { buffer.assign ((size_t) n, 0.0f); writePos = 0; }  // ⚠️ 只在这里分配
 
     void write (float x)                        // ✅ 音频线程可安全调用：只读写
-    {
-        buffer[(size_t) writePos] = x;
-        writePos = (writePos + 1) % (int) buffer.size();
-    }
+    { buffer[(size_t) writePos] = x; writePos = (writePos + 1) % (int) buffer.size(); }
 
     float readDelayed (int delaySamples) const  // 0 = 最近写入的那个
     {
@@ -128,15 +113,12 @@ public:
         while (idx < 0) idx += (int) buffer.size();   // ⚠️ C++ 的 % 对负数返回负值
         return buffer[(size_t) idx];
     }
-
 private:
     std::vector<float> buffer;      // 容量在 prepare 时定死，之后不变
     int writePos = 0;
 };
 ```
-
 **怎么验证**：① 往 8 格缓冲区写 1..20，读 `readDelayed(3)` 应为 17，手算对照；② 故意写 `readDelayed(100)`（超容量），看它会不会崩——**理解为什么它不一定崩，比让它崩更重要**；③ 用 `-fsanitize=address` 重编译再跑，看越界有没有被抓到，见 [[AddressSanitizer]]。
-
 **耗时与卡点**：15–25 小时。段错误只告诉你"崩了"不告诉你"哪一行" → 学 `lldb` 或 ASan，见 [[lldb 基础]]；以为 `std::vector` 是"动态数组所以随便用" → 它每次扩容都要分配 + 拷贝；写成 `buffer[writePos - delaySamples]` → 负数下标是未定义行为。
 
 ---
@@ -146,7 +128,6 @@ private:
 > [!important] 这是整条路线的情绪转折点
 > 前两个阶段的产出都是"打印出来的数字"。这个阶段结束时，**你会第一次听到一段由你自己的 C++ 代码处理过的音频。**
 > 这一声比后面任何阶段都重要——它是你坚持下去的燃料。
-
 **目标**：不借助任何音频库，手写 WAV 解析与写入。
 **为什么不用库**：因为你需要知道"音频数据到底是什么"。一个 16-bit 立体声 WAV，剥掉头部之后**就是一串交错的整数**。这个认识一旦建立，后面所有 DSP 都只是"对这串数字做运算"。
 **学什么**：RIFF / WAVE 容器结构（`RIFF` 头 + 一串 chunk：`fmt `、`data`，可能还有 `LIST`/`fact`）；**小端（little-endian）**字节序；位深（bit depth）与 `[-1, 1]` 浮点的映射；交错（interleaved）存储 `L R L R ...`；浮点转 `int16` 前**必须钳制**，否则整数回绕成巨大噪声。
@@ -155,18 +136,9 @@ private:
 struct WavData { std::vector<float> samples; uint32_t sampleRate = 0;
                  uint16_t numChannels = 0, bitsPerSample = 0; };
 
-// WAV 一律小端。逐字节读最稳 —— 直接把文件 read 进结构体，
-// 编译器插入的 padding 字节会搞错字段位置。
-static uint32_t readLE (std::ifstream& f, int n)
-{
-    unsigned char b[4] = { 0, 0, 0, 0 };
-    f.read (reinterpret_cast<char*> (b), n);
-    uint32_t v = 0;
-    for (int i = 0; i < n; ++i) v |= (uint32_t) b[i] << (8 * i);
-    return v;
-}
-
-// 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部
+// readLE(f, n)：逐字节读 n 字节、按小端拼成整数（自己写，10 行以内）。
+// 逐字节读最稳 —— 直接 read 进结构体会被编译器插入的 padding 搞错字段位置。
+// 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部。
 WavData loadWav (const std::string& path)
 {
     std::ifstream f (path, std::ios::binary);   // ⚠️ 永远加 binary
@@ -179,13 +151,12 @@ WavData loadWav (const std::string& path)
         const uint32_t size = readLE (f, 4);
         const auto chunkStart = f.tellg();      // 记下数据起点
         const std::string tag (id, 4);
-        if (tag == "fmt ")
+
+        if (tag == "fmt ")   // audioFormat(2) ch(2) rate(4) byteRate(4) align(2) bits(2)
         {
-            readLE (f, 2);                      // audioFormat：1 = PCM, 3 = float
-            out.numChannels   = (uint16_t) readLE (f, 2);
-            out.sampleRate    = readLE (f, 4);
-            readLE (f, 4); readLE (f, 2);       // byteRate / blockAlign
-            out.bitsPerSample = (uint16_t) readLE (f, 2);
+            readLE (f, 2);
+            out.numChannels = (uint16_t) readLE (f, 2);  out.sampleRate = readLE (f, 4);
+            readLE (f, 4); readLE (f, 2);                out.bitsPerSample = (uint16_t) readLE (f, 2);
         }
         else if (tag == "data")
         {
@@ -204,8 +175,6 @@ WavData loadWav (const std::string& path)
     return out;
 }
 ```
-```
-
 **产出**：一个命令行程序 `gain in.wav out.wav -6`，把音量降低 6 dB 并写出新文件。
 
 ```cpp
@@ -217,7 +186,6 @@ int16_t toPcm16 (float x)
     return (int16_t) std::lround (x * 32767.0f);
 }
 ```
-
 **怎么验证**：用 Python 对照读两个文件，确认峰值比正好是 -6 dB。
 
 ```python
@@ -234,13 +202,11 @@ assert abs(ratio_db + 6.0) < 0.1, "增益不对，或钳制出问题了"
 > [!tip] 从这里开始，你的验证方式变了
 > 阶段 0–1 是"打印数字对不对"。从阶段 2 起是**"耳朵 + 图 + 数字"三重验证**。
 > 你有前电子音乐人的耳朵，这是纯 CS 背景的人没有的验证通道——但**耳朵不能替代断言**，两者都要有。见 [[DSP 单元测试怎么写]]。
-
 **耗时与卡点**：10–18 小时。把文件 `read` 进结构体 → padding 导致字段错位，`sampleRate` 变成天文数字；忽略 chunk 的奇数补齐字节 → 后面所有数据错位一位，声音变成噪声；只处理 `fmt ` 恰好 16 字节 → 很多文件带扩展字段，必须按 `size` 跳过；浮点转整数忘了钳制 → 安静处突然爆响；用文本模式打开二进制 → 永远加 `std::ios::binary`。
 
 ---
 
 ## 阶段 3：第一个 DSP
-
 **目标**：在命令行程序里实现 5 个模块，**每个都用 Python 画图验证**。
 
 > [!warning] 这一阶段不要碰 JUCE
@@ -287,15 +253,12 @@ float readFractional (const RingBuffer& rb, float delaySamples)
 
 > [!tip] 让 AI 写验证脚本，不要让它写 DSP
 > 这三类测试的 Python 脚本非常适合交给 Agent 生成。但 DSP 本身必须你自己写——**否则你不会有"这个数不对"的直觉**。
-
 **耗时与卡点**：30–50 小时，**全程最长**，也是收益最持久的阶段。滤波器"爆炸"（输出变 `inf`/`nan`）→ 系数没归一化、符号约定抄错、参数没钳制，见 [[Biquad 滤波器]]；静音时 CPU 飙升 → denormal 数，见 [[denormal 数处理]]；立体声串音 → 两声道共用了一组滤波器状态，**一个声道一个实例**；扫频有阶梯感 → 系数每 block 才更新一次；FFT 看频响毛刺大 → 忘了加窗，见 [[窗函数]]。
 
 ---
 
 ## 阶段 4：进入 JUCE
-
 **目标**：**一个能在 DAW 里加载并出声的插件。**
-
 **前置条件**：阶段 3 的 5 个模块你都能自己写、能解释、能验证。达不到就回去补——**在 JUCE 里调试 DSP 比在命令行里难十倍**。
 
 **学什么**：JUCE 项目结构（`PluginProcessor` + `PluginEditor` 的分工，见 [[JUCE 的架构与模块划分]]）；`AudioProcessor` 生命周期（构造 → `prepareToPlay` → `processBlock` × N → `releaseResources`）；`AudioBuffer<float>`（注意它是**分离声道**而非交错）；CMake 构建（见 [[JUCE 的 CMake API]]、[[CMake 插件项目结构]]）；Standalone 模式（**调试利器**，不用开 DAW 就能测）。
@@ -338,23 +301,19 @@ private:
     juce::SmoothedValue<float> smoothedGain;
 };
 ```
-```
 
 > [!warning] 这段代码里有两个新手必踩的坑
 > 1. `processBlock` 第一行不判断 `n == 0` → 某些宿主会给空 block
 > 2. 把 `getNextValue()` 写进**声道循环内部** → 平滑器每个声道各推进一次，左右声道得到不同增益，声像漂移。**平滑器每采样只能推进一次。**
 >
 > 另外：`AudioParameterFloat` 的第一个参数在较新的 JUCE 里是 `juce::ParameterID { "id", versionHint }`，老版本接受裸字符串。以你锁定的 release tag 的文档为准。
-
 **产出**：构建产物出现在 `_artefacts/` 下，DAW 能扫描到，加载后音频能通过。
 **怎么验证**：① **先跑 Standalone**，不要一上来就开 DAW——这一步能把"宿主交互问题"和"DSP 问题"分流；② 再在 DAW 里加载，确认能出声；③ 跑 `pluginval` 或 `auval`，见 [[插件合规性测试：pluginval]]、[[auval 与 AU 验证]]。
-
 **耗时与卡点**：20–35 小时，其中**至少一半花在工具链而不是 DSP 上**。插件在 DAW 里根本不出现 → 扫描机制、安装路径、格式没勾选，见 [[插件扫描机制]]；一加载就崩 → 构造函数里做了重活；改采样率后声音错乱 → 系数只在构造函数里算过一次，见 [[采样率变化处理]]；Debug 构建慢到不能用 → 调试用 Standalone + Debug，测声音用 Release；编译要几分钟 → JUCE 编译时间长是常态，配 ccache，见 [[ccache 与编译缓存]]。
 
 ---
 
 ## 阶段 5：加上 GUI 和参数
-
 **目标**：插件有旋钮、能被宿主自动化、关掉工程再打开参数还在。
 
 **学什么**：参数系统 `AudioParameterFloat` / `AudioProcessorValueTreeState`（见 [[参数自动化与线程安全]]）；参数范围与曲线（**频率参数必须用对数映射**，否则旋钮手感全错，见 [[MOC - UI & UX]]）；旋钮控件 `juce::Slider` 与 `SliderAttachment`（见 [[JUCE 的 Slider 与旋钮]]）；状态保存与恢复 `getStateInformation` / `setStateInformation`（见 [[状态保存与恢复]]）；界面布局 `resized()` + `FlexBox`/`Grid`（见 [[JUCE Component 体系]]）。
@@ -364,9 +323,7 @@ private:
 > 这是纯 CS 背景的开发者最容易做砸的地方——他们会把 cutoff 做成 0–20000 Hz 的线性旋钮，然后没人愿意用。
 > 把这份直觉写进 [[从音乐制作人到插件开发者]] 的翻译表里。
 
-**产出**：插件有 2–3 个旋钮，能自动化，能保存状态。
-**怎么验证**：① 拖旋钮 → 声音连续变化，**没有咔哒声**；② 宿主里画自动化曲线 → 播放时参数跟着走；③ 关掉工程重开 → 旋钮位置和声音完全恢复；④ `pluginval --strictness-level 10` 通过，见 [[插件验证工具]]。
-
+**产出与验证**：插件有 2–3 个旋钮，能自动化，能保存状态。① 拖旋钮 → 声音连续变化，**没有咔哒声**；② 宿主里画自动化曲线 → 播放时参数跟着走；③ 关掉工程重开 → 旋钮位置和声音完全恢复；④ `pluginval --strictness-level 10` 通过，见 [[插件验证工具]]。
 **耗时与卡点**：20–30 小时。旋钮动了但声音不变 → 参数没在 `processBlock` 里读；旋钮一动就爆音 → 没做平滑，见 [[参数平滑 parameter smoothing]]；关掉再打开参数回默认值 → 忘了实现 `getStateInformation`；界面拉伸后控件乱飞 → 用了绝对像素坐标；销毁顺序导致崩溃 → Attachment 的生命周期陷阱，见 [[MOC - UI & UX]]。
 
 ---
@@ -473,7 +430,7 @@ private:
 
 你想用 AI/Agent 写代码，这是对的——但**分工搞错会毁掉整条路线**。
 
-### 让 AI 做最划算的事
+**让 AI 做最划算的事**：
 
 | 任务 | 为什么划算 |
 |---|---|
@@ -484,8 +441,6 @@ private:
 | **写构建配置与样板代码** | CMakeLists、插件骨架、状态序列化——没有学习价值，抄就行 |
 | **当"源码导游"** | 问它"`prepareToPlay` 会被调用几次""这个类的生命周期是什么"，见 [[用 AI 读懂 JUCE 源码]] |
 | **审查实时安全性** | 把 `processBlock` 贴给它，问"这里有没有分配、加锁、阻塞"。它的检查比人可靠 |
-
-### 必须你自己写的事
 
 > [!important] DSP 核心逻辑必须自己写
 > 原因不是道德，是**功能性**的：**你需要建立直觉，否则你无法调试。**
@@ -500,9 +455,7 @@ private:
 **必须自己写**：所有滤波器、延迟线、检测器的实现；参数怎么映射到 DSP 内部（范围、曲线、单位）；平滑时间常数的选择；信号流的拓扑（先滤波还是先饱和？侧链从哪取？）。
 **可以让 AI 写**：测试脚本、绘图、构建配置、UI 布局样板、状态序列化的代码。
 
-### 为什么"能跑但不懂"的代码在音频领域特别危险
-
-普通 CRUD 程序里，一段不懂的代码最多是"以后维护麻烦"。音频插件里，它会导致三类你在别处遇不到的问题：
+**为什么"能跑但不懂"的代码在音频领域特别危险**——普通 CRUD 程序里，一段不懂的代码最多是"以后维护麻烦"。音频插件里，它会导致三类你在别处遇不到的问题：
 
 1. **实时契约违规不会立刻报错。** 在音频线程里 `push_back` 一个 vector，在你的 M2 上、3 个音轨的测试工程里**完全听不出问题**。它在用户的旧机器上、40 个音轨的工程里爆音。见 [[实时音频线程契约]]。
 2. **DSP 的错误往往"听起来是对的"。** 系数差一倍、符号抄反、平滑时间常数差 10 倍——这些都会产生"确实变了声音"的结果。**只有对照理论值或参考实现才能发现。**

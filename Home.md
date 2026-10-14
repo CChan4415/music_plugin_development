@@ -46,6 +46,8 @@ tags: [moc]
 - 🤖 **Agent 怎么工作** → [[AGENTS|维护契约]]
 - 🧭 **知识库怎么用** → [[_meta/how-to-use|使用说明]]
 - 🏷️ **标签体系** → [[_meta/taxonomy|标签与命名规范]]
+- 🧩 **为什么这么设计** → [[_meta/kb-design|知识库设计方案]]
+- 📖 **中英术语对照** → [[_meta/glossary|术语表]]
 
 ---
 

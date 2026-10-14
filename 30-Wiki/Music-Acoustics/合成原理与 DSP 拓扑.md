@@ -172,9 +172,8 @@ struct FmOperator
 };
 
 // 载波 + 调制器：index 就是调制指数 I
-float fmSample (FmOperator& carrier, FmOperator& mod,
-                float carrierHz, float modHz, float index)
-{ return carrier.process (carrierHz, index * mod.process (modHz, 0.0f)); }
+float fmSample (FmOperator& c, FmOperator& m, float cHz, float mHz, float index)
+{ return c.process (cHz, index * m.process (mHz, 0.0f)); }
 ```
 
 ### 难点：FM 极易混叠
@@ -382,57 +381,48 @@ $$f_0 = \frac{f_s}{N + \phi_{\text{filter}}(f_0)}$$
 // 前提：随机数生成器必须是**成员**，在 prepareToPlay 里构造/播种
 // ❌ 不要用 std::random_device（系统调用，会阻塞音频线程）
 // ❌ 不要把分布对象写成函数内 static
-
-class WhiteNoise
+struct Rng
 {
-public:
-    void prepare (std::uint32_t seed) { rng.seed (seed); }
-    float process() { return dist (rng); }          // [-1, 1)
-private:
-    std::mt19937 rng;
+    std::mt19937 gen;
     std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
+    void prepare (std::uint32_t seed) { gen.seed (seed); }
+    float next() { return dist (gen); }               // 白噪声：[-1, 1)
 };
 
 // 粉噪声：Voss-McCartney —— 叠加多行白噪声，第 k 行每 2^k 个采样才更新一次。
 // 更新越慢的行能量越集中在低频，加起来就是近似的 1/f 谱。
-class PinkNoise
+struct PinkNoise
 {
-public:
-    void prepare (std::uint32_t seed)
-    { rng.seed (seed); rows.fill (0.0f); counter = 0; }
+    static constexpr int rows = 16;
+    std::array<float, rows> v {};
+    std::uint32_t counter = 0;
+    Rng rng;
+
+    void prepare (std::uint32_t seed) { rng.prepare (seed); v.fill (0.0f); counter = 0; }
 
     float process()
     {
         ++counter;
         std::uint32_t mask = 1; int row = 0;
-        while (row < numRows - 1 && (counter & mask) != 0) { mask <<= 1; ++row; }
-        rows[row] = dist (rng);                     // 最低的 0 位 → 决定更新哪一行
+        while (row < rows - 1 && (counter & mask) != 0) { mask <<= 1; ++row; }
+        v[row] = rng.next();                          // 最低的 0 位 → 决定更新哪一行
 
         float sum = 0.0f;
-        for (float r : rows) sum += r;
-        return sum * (1.0f / numRows);
+        for (float x : v) sum += x;
+        return sum * (1.0f / rows);
     }
-private:
-    static constexpr int numRows = 16;
-    std::array<float, numRows> rows {};
-    std::uint32_t counter = 0;
-    std::mt19937 rng;
-    std::uniform_real_distribution<float> dist { -1.0f, 1.0f };
 };
 
 // 布朗噪声：有泄漏的积分（漏积分器）
-class BrownNoise
+struct BrownNoise
 {
-public:
-    void prepare (std::uint32_t seed) { white.prepare (seed); state = 0.0f; }
+    Rng rng; float state = 0.0f;
+    void prepare (std::uint32_t seed) { rng.prepare (seed); state = 0.0f; }
     float process()
     {
-        state = 0.99f * state + 0.05f * white.process();  // leak<1：防直流漂移累积
-        return state * 4.0f;                              // 补偿幅度损失
+        state = 0.99f * state + 0.05f * rng.next();   // leak<1：防直流漂移累积
+        return state * 4.0f;                          // 补偿幅度损失
     }
-private:
-    WhiteNoise white;
-    float state = 0.0f;
 };
 ```
 

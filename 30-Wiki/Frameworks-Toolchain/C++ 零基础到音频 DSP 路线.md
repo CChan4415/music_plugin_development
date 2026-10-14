@@ -86,21 +86,12 @@ int main()
 
 > [!important] 明确列出：这些现在**不用学**
 > 这条比"学什么"更重要。零基础的人 90% 的时间浪费在这里。
->
-> | 暂时跳过 | 什么时候再碰 |
-> |---|---|
-> | 模板与模板元编程 | 需要泛型 DSP 容器时；读 JUCE 源码时被动遇到 |
-> | 多重继承、虚继承 | 基本不需要 |
-> | 异常（exception）的完整语义 | 音频线程里根本不用异常，见 [[实时音频线程契约]] |
-> | 移动语义（move）、完美转发 | 阶段 3 之后，开始关心拷贝开销时 |
-> | 智能指针 `unique_ptr` / `shared_ptr` | 阶段 4 进 JUCE 时必学，那时才有场景 |
-> | `std::thread`、并发、原子操作 | 阶段 4 之后，配合 [[SPSC 队列]] 学 |
-> | `constexpr`、C++20 concepts / ranges / coroutines | 优化阶段和长期以后 |
+> **暂时跳过**：模板与模板元编程、多重继承、异常（exception）的完整语义、移动语义（move）与完美转发、智能指针、`std::thread` 与原子操作、`constexpr`、C++20 concepts / ranges / coroutines。
+> **什么时候再碰**：模板与智能指针在阶段 4 读 JUCE 源码时被动遇到；移动语义在阶段 3 之后关心拷贝开销时；并发与原子操作配合 [[SPSC 队列]] 学；其余长期不用。
 >
 > **判据**：如果一个特性在"读一段音频处理代码"时不会挡路，就推迟它。
 
-**耗时**：15–25 小时。超过 35 小时还在原地，说明你在啃上面那张"暂时跳过"表——**回去写代码**。
-**常见卡点**：装不上编译器 → 用 Xcode Command Line Tools 就够，见 [[MOC - Frameworks & Toolchain]]；分不清 `.h` 和 `.cpp` → 先记住"声明放头文件、定义放源文件"；`#include <>` 与 `#include ""` 的区别 → 尖括号找系统路径，引号先找当前目录。
+**耗时与卡点**：15–25 小时；超过 35 小时还在原地，说明你在啃上面那张"暂时跳过"表——**回去写代码**。常见卡点：装不上编译器 → 用 Xcode Command Line Tools 就够，见 [[MOC - Frameworks & Toolchain]]；分不清 `.h` 和 `.cpp` → 先记住"声明放头文件、定义放源文件"；`#include <>` 与 `#include ""` 的区别 → 尖括号找系统路径，引号先找当前目录。
 
 ---
 
@@ -146,8 +137,7 @@ private:
 
 **怎么验证**：① 往 8 格缓冲区写 1..20，读 `readDelayed(3)` 应为 17，手算对照；② 故意写 `readDelayed(100)`（超容量），看它会不会崩——**理解为什么它不一定崩，比让它崩更重要**；③ 用 `-fsanitize=address` 重编译再跑，看越界有没有被抓到，见 [[AddressSanitizer]]。
 
-**耗时**：15–25 小时。
-**常见卡点**：段错误只告诉你"崩了"不告诉你"哪一行" → 学 `lldb` 或 ASan，见 [[lldb 基础]]；以为 `std::vector` 是"动态数组所以随便用" → 它每次扩容都要分配 + 拷贝；写成 `buffer[writePos - delaySamples]` → 负数下标是未定义行为。
+**耗时与卡点**：15–25 小时。段错误只告诉你"崩了"不告诉你"哪一行" → 学 `lldb` 或 ASan，见 [[lldb 基础]]；以为 `std::vector` 是"动态数组所以随便用" → 它每次扩容都要分配 + 拷贝；写成 `buffer[writePos - delaySamples]` → 负数下标是未定义行为。
 
 ---
 
@@ -177,34 +167,18 @@ static uint32_t readLE (std::ifstream& f, int n)
 }
 
 // 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部
-std::vector<float> readData (std::ifstream& f, uint32_t size, uint16_t bits)
-{
-    std::vector<float> out (size / (bits / 8));
-    for (size_t i = 0; i < out.size(); ++i)
-    {
-        if (bits == 16)                     // int16 → float：除以 32768 → [-1, 1)
-            out[i] = (float) (int16_t) readLE (f, 2) / 32768.0f;
-        else if (bits == 32)                // 32-bit float：位模式即 IEEE-754
-        { const uint32_t b = readLE (f, 4); std::memcpy (&out[i], &b, 4); }
-    }
-    return out;
-}
-
-// 遍历 chunk：不要假设只有 fmt 和 data，也不要用固定偏移量硬跳
 WavData loadWav (const std::string& path)
 {
     std::ifstream f (path, std::ios::binary);   // ⚠️ 永远加 binary
     WavData out;
     f.seekg (12);                               // 跳过 RIFF/size/WAVE
-
-    while (f)
+    while (f)                                   // 逐个 chunk 走，别假设顺序
     {
         char id[4];
         if (! f.read (id, 4)) break;
         const uint32_t size = readLE (f, 4);
         const auto chunkStart = f.tellg();      // 记下数据起点
         const std::string tag (id, 4);
-
         if (tag == "fmt ")
         {
             readLE (f, 2);                      // audioFormat：1 = PCM, 3 = float
@@ -214,13 +188,22 @@ WavData loadWav (const std::string& path)
             out.bitsPerSample = (uint16_t) readLE (f, 2);
         }
         else if (tag == "data")
-            out.samples = readData (f, size, out.bitsPerSample);
-
+        {
+            out.samples.resize (size / (out.bitsPerSample / 8));
+            for (float& s : out.samples)
+            {
+                if (out.bitsPerSample == 16)    // int16 → float：除以 32768
+                    s = (float) (int16_t) readLE (f, 2) / 32768.0f;
+                else                            // 32-bit float：位模式即 IEEE-754
+                { const uint32_t b = readLE (f, 4); std::memcpy (&s, &b, 4); }
+            }
+        }
         // 跳到 chunk 末尾；size 为奇数时有一个补齐字节，这是 WAV 的硬规定
         f.seekg (chunkStart + (std::streamoff) size + (std::streamoff) (size & 1));
     }
     return out;
 }
+```
 ```
 
 **产出**：一个命令行程序 `gain in.wav out.wav -6`，把音量降低 6 dB 并写出新文件。
@@ -252,8 +235,7 @@ assert abs(ratio_db + 6.0) < 0.1, "增益不对，或钳制出问题了"
 > 阶段 0–1 是"打印数字对不对"。从阶段 2 起是**"耳朵 + 图 + 数字"三重验证**。
 > 你有前电子音乐人的耳朵，这是纯 CS 背景的人没有的验证通道——但**耳朵不能替代断言**，两者都要有。见 [[DSP 单元测试怎么写]]。
 
-**耗时**：10–18 小时。
-**常见卡点**：把文件 `read` 进结构体 → padding 导致字段错位，`sampleRate` 变成天文数字；忽略 chunk 的奇数补齐字节 → 后面所有数据错位一位，声音变成噪声；只处理 `fmt ` 恰好 16 字节 → 很多文件带扩展字段，必须按 `size` 跳过；浮点转整数忘了钳制 → 安静处突然爆响；用文本模式打开二进制 → 永远加 `std::ios::binary`。
+**耗时与卡点**：10–18 小时。把文件 `read` 进结构体 → padding 导致字段错位，`sampleRate` 变成天文数字；忽略 chunk 的奇数补齐字节 → 后面所有数据错位一位，声音变成噪声；只处理 `fmt ` 恰好 16 字节 → 很多文件带扩展字段，必须按 `size` 跳过；浮点转整数忘了钳制 → 安静处突然爆响；用文本模式打开二进制 → 永远加 `std::ios::binary`。
 
 ---
 
@@ -306,8 +288,7 @@ float readFractional (const RingBuffer& rb, float delaySamples)
 > [!tip] 让 AI 写验证脚本，不要让它写 DSP
 > 这三类测试的 Python 脚本非常适合交给 Agent 生成。但 DSP 本身必须你自己写——**否则你不会有"这个数不对"的直觉**。
 
-**耗时**：30–50 小时。**全程最长**，也是收益最持久的阶段。
-**常见卡点**：滤波器"爆炸"（输出变 `inf`/`nan`）→ 系数没归一化、符号约定抄错、参数没钳制，见 [[Biquad 滤波器]]；静音时 CPU 飙升 → denormal 数，见 [[denormal 数处理]]；立体声串音 → 两声道共用了一组滤波器状态，**一个声道一个实例**；扫频有阶梯感 → 系数每 block 才更新一次；FFT 看频响毛刺大 → 忘了加窗，见 [[窗函数]]。
+**耗时与卡点**：30–50 小时，**全程最长**，也是收益最持久的阶段。滤波器"爆炸"（输出变 `inf`/`nan`）→ 系数没归一化、符号约定抄错、参数没钳制，见 [[Biquad 滤波器]]；静音时 CPU 飙升 → denormal 数，见 [[denormal 数处理]]；立体声串音 → 两声道共用了一组滤波器状态，**一个声道一个实例**；扫频有阶梯感 → 系数每 block 才更新一次；FFT 看频响毛刺大 → 忘了加窗，见 [[窗函数]]。
 
 ---
 
@@ -344,7 +325,6 @@ public:
         const int n = buffer.getNumSamples();
         if (n == 0) return;                             // ⚠️ 合法情况，别漏
         smoothedGain.setTargetValue (juce::Decibels::decibelsToGain (gainDb->get()));
-
         for (int i = 0; i < n; ++i)
         {
             const float g = smoothedGain.getNextValue();  // 每采样只推进一次
@@ -358,6 +338,7 @@ private:
     juce::SmoothedValue<float> smoothedGain;
 };
 ```
+```
 
 > [!warning] 这段代码里有两个新手必踩的坑
 > 1. `processBlock` 第一行不判断 `n == 0` → 某些宿主会给空 block
@@ -368,8 +349,7 @@ private:
 **产出**：构建产物出现在 `_artefacts/` 下，DAW 能扫描到，加载后音频能通过。
 **怎么验证**：① **先跑 Standalone**，不要一上来就开 DAW——这一步能把"宿主交互问题"和"DSP 问题"分流；② 再在 DAW 里加载，确认能出声；③ 跑 `pluginval` 或 `auval`，见 [[插件合规性测试：pluginval]]、[[auval 与 AU 验证]]。
 
-**耗时**：20–35 小时。其中**至少一半花在工具链而不是 DSP 上**。
-**常见卡点**：插件在 DAW 里根本不出现 → 扫描机制、安装路径、格式没勾选，见 [[插件扫描机制]]；一加载就崩 → 构造函数里做了重活；改采样率后声音错乱 → 系数只在构造函数里算过一次，见 [[采样率变化处理]]；Debug 构建慢到不能用 → 调试用 Standalone + Debug，测声音用 Release；编译要几分钟 → JUCE 编译时间长是常态，配 ccache，见 [[ccache 与编译缓存]]。
+**耗时与卡点**：20–35 小时，其中**至少一半花在工具链而不是 DSP 上**。插件在 DAW 里根本不出现 → 扫描机制、安装路径、格式没勾选，见 [[插件扫描机制]]；一加载就崩 → 构造函数里做了重活；改采样率后声音错乱 → 系数只在构造函数里算过一次，见 [[采样率变化处理]]；Debug 构建慢到不能用 → 调试用 Standalone + Debug，测声音用 Release；编译要几分钟 → JUCE 编译时间长是常态，配 ccache，见 [[ccache 与编译缓存]]。
 
 ---
 
@@ -387,8 +367,7 @@ private:
 **产出**：插件有 2–3 个旋钮，能自动化，能保存状态。
 **怎么验证**：① 拖旋钮 → 声音连续变化，**没有咔哒声**；② 宿主里画自动化曲线 → 播放时参数跟着走；③ 关掉工程重开 → 旋钮位置和声音完全恢复；④ `pluginval --strictness-level 10` 通过，见 [[插件验证工具]]。
 
-**耗时**：20–30 小时。
-**常见卡点**：旋钮动了但声音不变 → 参数没在 `processBlock` 里读；旋钮一动就爆音 → 没做平滑，见 [[参数平滑 parameter smoothing]]；关掉再打开参数回默认值 → 忘了实现 `getStateInformation`；界面拉伸后控件乱飞 → 用了绝对像素坐标；销毁顺序导致崩溃 → Attachment 的生命周期陷阱，见 [[MOC - UI & UX]]。
+**耗时与卡点**：20–30 小时。旋钮动了但声音不变 → 参数没在 `processBlock` 里读；旋钮一动就爆音 → 没做平滑，见 [[参数平滑 parameter smoothing]]；关掉再打开参数回默认值 → 忘了实现 `getStateInformation`；界面拉伸后控件乱飞 → 用了绝对像素坐标；销毁顺序导致崩溃 → Attachment 的生命周期陷阱，见 [[MOC - UI & UX]]。
 
 ---
 
@@ -462,14 +441,14 @@ private:
 | 卡点 | 一句实用建议 |
 |---|---|
 | **编译错误看不懂** | **永远从输出的第一行读起**。C++ 编译器会因为一个缺失的分号报出 200 行错误 |
-| **链接错误（linker error）** | 这不是语法错误，是"找不到实现"或"实现了两次"。检查：函数声明了但没定义？`.cpp` 忘了加进构建？头文件里定义了函数（应加 `inline` 或挪到 `.cpp`）？ |
-| **段错误（segfault）** | 99% 是访问了不该访问的内存：空指针、越界、用了已释放的对象。**用 `-fsanitize=address` 重编译**，见 [[AddressSanitizer]] |
+| **链接错误（linker error）** | 不是语法错误，是"找不到实现"或"实现了两次"：函数声明了没定义？`.cpp` 忘了加进构建？头文件里定义了函数（应加 `inline` 或挪到 `.cpp`）？ |
+| **段错误（segfault）** | 99% 是访问了不该访问的内存（空指针、越界、用了已释放的对象）。**用 `-fsanitize=address` 重编译**，见 [[AddressSanitizer]] |
 | **浮点精度** | `float` 只有约 7 位有效数字。**滤波器内部状态、长时间累加用 `double`**；音频样本用 `float` 通常够 |
 | **`std::vector` 越界** | `operator[]` **不做边界检查**。调试时用 `.at()`，或用 ASan。绝不假设"它没崩就是对的" |
 | **头文件与实现分离** | 两条：**声明放 `.h`，定义放 `.cpp`**；头文件里只放 `inline` 函数和类定义 |
 | **构建系统** | 抄一个能用的模板改路径和文件名，**别从零写 CMakeLists**。见 [[CMake 基础]] |
 | **符号约定不统一** | 不同资料的差分方程符号约定不同，抄公式前先确认，见 [[Biquad 滤波器]] |
-| **`int` 与 `size_t` 混用** | `size_t` 是无符号的，`for (int i = v.size() - 1; i >= 0; --i)` 是经典死循环陷阱 |
+| **`int` 与 `size_t` 混用** | `size_t` 无符号，`for (int i = v.size() - 1; i >= 0; --i)` 是经典死循环陷阱 |
 | **Debug 能跑，Release 崩** | 未定义行为（UB）的典型特征。**UB 不是"随机"，是"编译器可以随便处理"**，见 [[UndefinedBehaviorSanitizer]] |
 | **插件在宿主里行为不同** | 先把同一个二进制当 Standalone 跑，分流"宿主交互问题"还是"DSP 问题" |
 | **改一个参数就爆音** | 参数平滑，见 [[参数平滑 parameter smoothing]] |
@@ -481,8 +460,7 @@ private:
 > |---|---|
 > | **能编译、能出声、但逻辑错** | 比如 Biquad 的 `A = 10^(dB/40)` 写成 `/20`——声音"有变化"，听起来"像那么回事"，但增益差一倍。**没有对照基准就发现不了** |
 > | **违反实时契约** | AI 默认写出"教科书 C++"：`std::vector::push_back`、`std::mutex`、`std::string`、`printf`。这些在普通程序里完全正确，在 [[实时音频线程契约]] 里全是禁忌。它**不会主动告诉你** |
-> | **用你听不懂的写法** | 模板、lambda 捕获、`auto&&`。代码能跑，但你改不动、也 debug 不了 |
-> | **接口是编的** | 看起来完全合理的 JUCE 方法名，实际不存在或签名不对。你会在编译错误里耗掉半天，还以为是自己环境的问题 |
+> | **用你听不懂的写法 / 接口是编的** | 模板、lambda 捕获、`auto&&`——代码能跑，但你改不动也 debug 不了；或者方法名看着完全合理，实际不存在或签名不对，你会在编译错误里耗掉半天 |
 > | **过度设计** | 你要一个增益，它给你一个带策略模式的 `GainProcessorFactory` |
 >
 > **防御办法**（缺一不可）：① **每一行都要能解释**，解释不了的行删掉重写，或让 AI 逐行讲解到你能复述；② **让它遵守 [[实时音频线程契约]]**，提示词里明确写"音频线程内不得分配、加锁、打日志、抛异常"；③ **用测试验证而不是用编译验证**——"能编译"和"能出声"都不是正确性证据；④ **DSP 核心逻辑自己写**（见下一节）；⑤ **查 API 是否存在**，编译一次就知道，别在脑子里推理。
@@ -540,11 +518,9 @@ private:
 
 - [[从音乐制作人到插件开发者]] — 你的知识盘点与缺口地图，本页是它的执行版
 - [[_meta/roadmap]] — 项目级路线图（本页是**学习**路线，那一页是**项目**路线）
-- [[MOC - Frameworks & Toolchain]] — 工具链、JUCE、CMake、调试
-- [[MOC - DSP]] · [[MOC - Realtime Engineering]] · [[MOC - UI & UX]]
-- [[实时音频线程契约]] · [[参数平滑 parameter smoothing]] · [[Biquad 滤波器]]
-- [[denormal 数处理]] · [[音频缓冲区 buffer 与 block size]] · [[插件格式对比]]
-- [[ADR-002 选择框架]] · [[AI 辅助 C++ 音频开发的真实效果]]
+- [[MOC - Frameworks & Toolchain]] · [[MOC - DSP]] · [[MOC - Realtime Engineering]] · [[MOC - UI & UX]]
+- [[实时音频线程契约]] · [[参数平滑 parameter smoothing]] · [[Biquad 滤波器]] · [[denormal 数处理]]
+- [[音频缓冲区 buffer 与 block size]] · [[插件格式对比]] · [[ADR-002 选择框架]] · [[AI 辅助 C++ 音频开发的真实效果]]
 
 > [!note] 待补充
 > - **时间估算的实测校准**：本页所有小时数是判断而非测量。等你走完阶段 0–2，把实际耗时填回来，这张表才有资格从 `seed` 升到 `solid`

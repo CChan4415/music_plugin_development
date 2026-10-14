@@ -1,5 +1,5 @@
 ---
-title: Playground 说明
+title: 50-Playground 说明
 type: meta
 status: solid
 updated: 2026-10-14
@@ -29,3 +29,26 @@ updated: 2026-10-14
 > [!tip] 实验的副产品比实验本身值钱
 > 你为 `exp-aliasing` 写的扫频 + FFT 绘图脚本，后面每个插件都能复用。
 > 把这些脚本放在 `50-Playground/tools/` 下。
+
+## 子目录
+
+| 目录 | 说明 |
+|---|---|
+| `tools/` | [[tools 说明]] — 音频分析、健康检查、跨平台检查 |
+| `tools/cpp/` | [[C++ 工具]] — 音频线程分配检测器 |
+| `ref-wav-io/` | [[ref-wav-io 说明]] — 最小 WAV 读写（C） |
+| `exp-*/` | 各实验目录，见下方 |
+
+## 实验清单
+
+| 实验 | 说明 |
+|---|---|
+| exp-000 | [[exp-000 环境检查]] |
+| exp-001 | [[exp-001 听到你算出来的声音]] |
+| exp-002 | [[exp-002 Biquad 滤波器]] |
+| exp-003 | [[exp-003 从延迟到混响]] |
+| — | [[参考实现：延迟线（C++）]] |
+
+## 相关
+
+- [[Home]]

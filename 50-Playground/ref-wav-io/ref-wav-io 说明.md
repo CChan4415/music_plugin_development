@@ -1,5 +1,5 @@
 ---
-title: 参考实现：最小 WAV 读写
+title: ref-wav-io 说明
 type: experiment
 domain: frameworks
 status: solid

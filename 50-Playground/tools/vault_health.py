@@ -72,6 +72,11 @@ def main():
 
     problems = defaultdict(list)
 
+    # 路径式链接的合法目标（如 [[_meta/roadmap]]、[[50-Playground/tools/tools 说明]]）
+    # Obsidian 支持 [[目录/文件]]，只要文件真的存在就不是错误。
+    path_keys = {str(rel)[:-3] if str(rel).endswith('.md') else str(rel): rel
+                 for rel in docs}
+
     # ---- 1 & 2: 链接分析 ----
     # 断链是**特性不是 bug**：MOC 里的链接构成待写队列。
     # 所以按「被引用次数」聚合 —— 被引用越多，越该优先写。
@@ -81,22 +86,59 @@ def main():
         if rel.parts[0] in ('99-Templates',):
             continue                      # 模板里的链接是占位符
         for raw in LINK_RE.findall(strip_code(d['text'])):
-            target = raw.strip()
+            # 表格里的链接要转义竖线：[[_meta/roadmap\|路线图]]
+            # 所以要去掉反斜杠，否则目标名会带上 "\"
+            target = raw.strip().replace('\\', '')
             if target.endswith('.md'):
                 target = target[:-3]
             if '...' in target or target.startswith('10-Sources/'):
                 continue                  # 说明性占位符
             # Obsidian 陷阱：链接名里含 "/" 会被当成路径 -> 永远解析不到。
             # 这是**真实错误**，必须报告（不是待写队列）。
-            if '/' in target and not target.startswith('_meta/'):
+            # 路径式链接是**合法的**（Obsidian 支持 [[目录/文件]]），
+            # 只要目标文件真的存在。只有**文件名本身**含 / 才是错误。
+            if '/' in target:
+                if target in path_keys:      # 合法路径链接，且目标存在
+                    continue
                 problems['链接名含斜杠'].append(
-                    f"{rel}  ->  [[{target}]]   （文件名不能含 /，Obsidian 会当路径解析）")
+                    f"{rel}  ->  [[{target}]]   （路径不存在，或文件名本身含 /）")
                 continue
             target = Path(target).name
             if target in by_stem:
                 inbound[target] += 1
             else:
                 missing_refs[target].add(str(rel))
+
+    # ---- 2.5: 孤儿页 + 同名冲突 ----
+    # Obsidian 按**文件名**识别笔记。所以：
+    #   • 同名文件（如 9 个 README.md）→ 链接无法解析 → 显示为孤儿
+    #   • 没有任何入链的页面 → 图谱里孤立，等于"写了没人看得到"
+    stems_map = defaultdict(list)
+    for rel in docs:
+        stems_map[rel.stem].append(rel)
+
+    for stem, lst in sorted(stems_map.items()):
+        if len(lst) > 1 and stem != 'README':
+            problems['同名冲突'].append(
+                f"『{stem}』有 {len(lst)} 个文件 —— Obsidian 无法解析 [[{stem}]]：" +
+                "、".join(str(x) for x in lst))
+
+    path_keys = {str(rel)[:-3] if str(rel).endswith('.md') else str(rel): rel for rel in docs}
+    inbound_ok = set()
+    for rel, d in docs.items():
+        for raw in LINK_RE.findall(strip_code(d['text'])):
+            t = raw.strip()
+            if t in path_keys:
+                inbound_ok.add(str(path_keys[t]))
+            elif t in stems_map and len(stems_map[t]) == 1:
+                inbound_ok.add(str(stems_map[t][0]))
+
+    SKIP_ORPHAN = ('99-Templates',)          # 模板通过插件调用，不需要入链
+    for rel in docs:
+        if rel.parts[0] in SKIP_ORPHAN:
+            continue
+        if str(rel) not in inbound_ok:
+            problems['孤儿页'].append(f"{rel}  （没有任何页面链接到它）")
 
     # ---- 3: frontmatter ----
     for rel, d in docs.items():
@@ -194,7 +236,7 @@ def main():
     single = len(queue) - len(hot)
     print(f"\n   另有 {single} 个只被引用一次的待写链接（正常，不用管）")
 
-    order = ['frontmatter 被转义', '链接名含斜杠', '孤儿页', '缺 frontmatter',
+    order = ['frontmatter 被转义', '链接名含斜杠', '同名冲突', '孤儿页', '缺 frontmatter',
              'frontmatter 字段不全', '非法 type', '日期格式错', '长期未更新',
              'Sources 被修改']
     for key in order:
@@ -202,7 +244,7 @@ def main():
         if not items:
             continue
         icon = '⚠️ ' if key in ('Sources 被修改', '链接名含斜杠',
-                                   'frontmatter 被转义') else '·'
+                                   'frontmatter 被转义', '同名冲突') else '·'
         print(f"\n── {icon}{key} ({len(items)}) ──")
         for it in items[:25]:
             print(f"    {it}")

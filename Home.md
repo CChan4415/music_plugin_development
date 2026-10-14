@@ -95,9 +95,28 @@ tags: [moc]
 - [[反馈延迟网络 FDN]] — 混响的主流结构
 - [[参数平滑 parameter smoothing]] — 新手最常见的爆音原因
 
-**已归档的专业资料** → [[10-Sources/README|Sources]]
+**已归档的专业资料** → [[10-Sources 说明|Sources]]
 
 ---
+
+## 目录导航
+
+每个目录都有一页说明，解释"这里放什么、怎么用"：
+
+| 目录 | 说明 | 内容 |
+|---|---|---|
+| 根目录 | [[README]] · [[AGENTS]] | 仓库首页、维护契约 |
+| `00-Inbox/` | [[00-Inbox 说明]] | 未整理的碎片 |
+| `10-Sources/` | [[10-Sources 说明]] | 归档的原始资料（只读） |
+| `20-Notes/` | [[20-Notes 说明]] | 你自己的理解与实验记录 |
+| `30-Wiki/` | 见上方领域地图 | Agent 维护的知识页 |
+| `40-Projects/` | [[40-Projects 说明]] | 插件项目与决策记录 |
+| `50-Playground/` | [[50-Playground 说明]] | 可运行的代码实验 |
+| └ 工具 | [[tools 说明]] · [[C++ 工具]] | 音频分析、健康检查 |
+| └ 参考实现 | [[参考实现：延迟线（C++）]] · [[ref-wav-io 说明]] | 可编译的 C/C++ 代码 |
+| `90-Attachments/` | （附件，无说明） | 图片、音频、PDF |
+| `99-Templates/` | [[99-Templates 说明]] | 笔记模板（wiki/source/note/gotcha/decision/project） |
+| `_meta/` | [[_meta/START-HERE\|从这里开始]] · [[_meta/roadmap\|路线图]] | 知识库自身的元信息 |
 
 ## 状态看板
 

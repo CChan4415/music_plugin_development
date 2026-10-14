@@ -103,7 +103,7 @@ updated: 2026-10-14
 
 - [[MOC - Frameworks & Toolchain]]
 - [[MOC - DSP]]
-- [[10-Sources/README|Sources 说明]]
+- [[10-Sources 说明]]
 - [[_meta/roadmap|路线图]]
 
 > [!note] 待补充

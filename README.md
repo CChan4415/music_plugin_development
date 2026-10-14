@@ -1,3 +1,10 @@
+---
+title: README（仓库首页）
+type: meta
+status: solid
+updated: 2026-10-14
+---
+
 # Music Plugin Development — Personal Knowledge Base
 
 一个用 **Obsidian 当界面、Agent 当维护者**的个人知识库，主题是：**音乐制作插件的开发**。
@@ -22,7 +29,7 @@
 > 所有内容是纯 Markdown。`[[双向链接]]` 在 GitHub 上不会渲染成链接，
 > 但用 Obsidian 打开就能正常跳转。
 >
-> 想跑代码实验：见 [[50-Playground/tools/README|工具说明]]，
+> 想跑代码实验：见 [[50-Playground/tools/tools 说明|工具说明]]，
 > 只需要 Python + numpy。
 
 ## 三层结构（别打破它）

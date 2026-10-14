@@ -56,13 +56,22 @@ $$x[n] = \frac{1}{N}\sum_{k=0}^{N-1} X[k]\, e^{+j 2\pi k n / N}$$
 
 > [!warning] 归一化约定不统一
 > 不同库对 $1/N$ 放哪里不一样：
-> - **numpy**：`rfft` 不除以 N，`irfft` 除以 N
-> - **JUCE**：`dsp::FFT::performRealOnlyForwardTransform` 不归一化
+> - **numpy**：`rfft` **不**除以 N，`irfft` 除以 N ✅ **已实测确认**
+> - **JUCE**：`performRealOnlyForwardTransform` 据文档不归一化 ⚠️ **未实测**（本机无 JUCE）
 > - 有的库正反变换都除以 $\sqrt{N}$
+>
+> **实测确认 numpy 的行为**（输入 `[1,2,3,4]`）：
+> ```
+> rfft(x)[0] = 10.0 = sum(x)   ← 没除以 N
+> irfft(rfft(x)) == x          ← irfft 内部除以 N
+> ```
 >
 > **后果**：如果你对比两个库的输出，幅度可能差 $N$ 倍。
 > **做 null test 前先确认归一化约定。** 这是"同名不同物"陷阱的一种
 > （见 [[2026-10-14 测量工具会骗你 —— 七次踩坑记录]]）。
+>
+> ⚠️ **JUCE 那一行我无法在本机验证**（未安装 JUCE）。等你到阶段 4 时，
+> 用 `irfft(rfft(x)) == x` 这个测试自己确认一遍。
 
 ---
 

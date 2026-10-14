@@ -1,0 +1,61 @@
+#!/bin/bash
+# 阻止两类已知会破坏知识库的问题进入提交：
+#   1. frontmatter 被转义（\--- 而不是 ---）—— Obsidian 会完全不解析元数据，且不报错
+#   2. 硬编码的个人路径（会导致别人 clone 后跑不起来）
+#
+# 安装: git config core.hooksPath .githooks
+# 跳过: git commit --no-verify
+
+git diff --cached --name-only --diff-filter=ACM | python3 -c '
+import sys, pathlib
+
+ESCAPED = []
+PERSONAL = []
+TEXT_EXT = {".md", ".py", ".sh", ".cpp", ".c", ".h", ".hpp", ".json", ".yml", ".yaml"}
+
+for line in sys.stdin:
+    f = line.strip()
+    if not f:
+        continue
+    p = pathlib.Path(f)
+    if not p.is_file():
+        continue
+    try:
+        text = p.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        continue
+
+    # 1. frontmatter 被转义
+    if p.suffix == ".md":
+        lines = text.splitlines()
+        if lines and lines[0].startswith("\\---"):
+            ESCAPED.append(f)
+
+    # 2. 硬编码个人路径
+    if p.suffix in TEXT_EXT and "/Users/cc/" in text:
+        PERSONAL.append(f)
+
+ok = True
+
+if ESCAPED:
+    ok = False
+    print("❌ 检测到被转义的 frontmatter（应为 --- 而不是 \\---）：")
+    for f in ESCAPED:
+        print("     " + f)
+    print("")
+    print("   原因：某个 markdown 格式化工具转义了 YAML 定界符。")
+    print("   Obsidian 会因此完全不解析该文件的元数据（而且不报错）。")
+    print("   修复：把开头的 \\--- 改回 ---")
+    print("")
+
+if PERSONAL:
+    ok = False
+    print("❌ 检测到硬编码的个人路径 /Users/cc/：")
+    for f in PERSONAL:
+        print("     " + f)
+    print("")
+    print("   改用 $HOME（shell）或相对描述（文档）。")
+    print("")
+
+sys.exit(0 if ok else 1)
+'

@@ -101,6 +101,11 @@ def main():
     # ---- 3: frontmatter ----
     for rel, d in docs.items():
         name = rel.name
+        # 转义的 frontmatter 定界符（\---）会让 Obsidian 完全不解析元数据。
+        # 这是**真错误**：通常是批量格式化工具误伤。
+        if d['text'].lstrip().startswith('\\---'):
+            problems['frontmatter 被转义'].append(
+                f"{rel}  以 \\--- 开头，Obsidian 不会解析元数据（应为 ---）")
         if name.startswith('tpl-') or name in ('README.md',):
             continue
         fm = d['fm']
@@ -185,13 +190,15 @@ def main():
     single = len(queue) - len(hot)
     print(f"\n   另有 {single} 个只被引用一次的待写链接（正常，不用管）")
 
-    order = ['链接名含斜杠', '孤儿页', '缺 frontmatter', 'frontmatter 字段不全',
-             '非法 type', '日期格式错', '长期未更新', 'Sources 可能被改过']
+    order = ['frontmatter 被转义', '链接名含斜杠', '孤儿页', '缺 frontmatter',
+             'frontmatter 字段不全', '非法 type', '日期格式错', '长期未更新',
+             'Sources 可能被改过']
     for key in order:
         items = problems.get(key, [])
         if not items:
             continue
-        icon = '⚠️ ' if key in ('Sources 可能被改过', '链接名含斜杠') else '·'
+        icon = '⚠️ ' if key in ('Sources 可能被改过', '链接名含斜杠',
+                                   'frontmatter 被转义') else '·'
         print(f"\n── {icon}{key} ({len(items)}) ──")
         for it in items[:25]:
             print(f"    {it}")

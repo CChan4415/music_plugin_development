@@ -129,21 +129,18 @@ private:
 ```cpp
 struct WavData { std::vector<float> samples; uint32_t sampleRate = 0;
                  uint16_t numChannels = 0, bitsPerSample = 0; };
-// 逐字节读最稳：直接 read 进结构体会被 padding 搞错字段位置
+// 逐字节读最稳：直接 read 进结构体会被 padding 搞错字段位置。WAV 一律小端。
 static uint32_t readLE (std::ifstream& f, int n)   // 读 n 字节，按小端拼成整数
 {
-    unsigned char b[4] = { 0, 0, 0, 0 };
-    f.read (reinterpret_cast<char*> (b), n);
-    uint32_t v = 0;
-    for (int i = 0; i < n; ++i) v |= (uint32_t) b[i] << (8 * i);
+    unsigned char b[4] = { 0 };  f.read ((char*) b, n);
+    uint32_t v = 0;  for (int i = 0; i < n; ++i) v |= (uint32_t) b[i] << (8 * i);
     return v;
 }
 // 剥掉头部之后，音频就是一串交错的整数 —— 这就是 WAV 的全部
 WavData loadWav (const std::string& path)
 {
     std::ifstream f (path, std::ios::binary);   // ⚠️ 永远加 binary
-    WavData out;
-    f.seekg (12);                               // 跳过 RIFF/size/WAVE
+    WavData out;  f.seekg (12);                 // 跳过 RIFF/size/WAVE
     while (f)                                   // 逐个 chunk 走，别假设顺序
     {
         char id[4];
@@ -153,8 +150,8 @@ WavData loadWav (const std::string& path)
         const std::string tag (id, 4);
         if (tag == "fmt ")   // format(2) ch(2) rate(4) byteRate(4) align(2) bits(2)
         {   readLE (f, 2);
-            out.numChannels = (uint16_t) readLE (f, 2); out.sampleRate = readLE (f, 4);
-            readLE (f, 4); readLE (f, 2);               out.bitsPerSample = (uint16_t) readLE (f, 2); }
+            out.numChannels = (uint16_t) readLE (f, 2);  out.sampleRate = readLE (f, 4);
+            readLE (f, 4); readLE (f, 2);                out.bitsPerSample = (uint16_t) readLE (f, 2); }
         else if (tag == "data")
         {   out.samples.resize (size / (out.bitsPerSample / 8));
             for (float& x : out.samples)
@@ -185,7 +182,6 @@ int16_t toPcm16 (float x)
 ```python
 import numpy as np
 from scipy.io import wavfile
-
 fs, x = wavfile.read("in.wav")       # 单声道示例
 fs2, y = wavfile.read("out.wav")
 ratio_db = 20 * np.log10(np.abs(y).max() / np.abs(x).max())
@@ -197,7 +193,7 @@ assert abs(ratio_db + 6.0) < 0.1, "增益不对，或钳制出问题了"
 > 阶段 0–1 是"打印数字对不对"。从阶段 2 起是**"耳朵 + 图 + 数字"三重验证**。
 > 你有前电子音乐人的耳朵，这是纯 CS 背景的人没有的验证通道——但**耳朵不能替代断言**，两者都要有。见 [[DSP 单元测试怎么写]]。
 
-**耗时与卡点**：10–18 小时。把文件 `read` 进结构体 → padding 导致字段错位；忽略 chunk 的奇数补齐字节 → 后面所有数据错位一位，声音变成噪声；只处理 `fmt ` 恰好 16 字节 → 很多文件带扩展字段，必须按 `size` 跳过；浮点转整数忘了钳制 → 安静处突然爆响。
+**耗时与卡点**：10–18 小时。把文件 `read` 进结构体 → padding 导致字段错位；忽略 chunk 的奇数补齐字节 → 后面所有数据错位一位，声音变成噪声；只处理 `fmt ` 恰好 16 字节 → 很多文件带扩展字段，必须按 `size` 跳过。
 
 ## 阶段 3：第一个 DSP
 
@@ -290,7 +286,7 @@ private:
 **产出**：构建产物出现在 `_artefacts/` 下，DAW 能扫描到，加载后音频能通过。
 **怎么验证**：① **先跑 Standalone**，不要一上来就开 DAW——这一步能把"宿主交互问题"和"DSP 问题"分流；② 再在 DAW 里加载，确认能出声；③ 跑 `pluginval` 或 `auval`，见 [[插件合规性测试：pluginval]]、[[auval 与 AU 验证]]。
 
-**耗时与卡点**：20–35 小时，其中**至少一半花在工具链而不是 DSP 上**。插件在 DAW 里根本不出现 → 扫描机制、安装路径、格式没勾选，见 [[插件扫描机制]]；一加载就崩 → 构造函数里做了重活；改采样率后声音错乱 → 系数只在构造函数里算过一次，见 [[采样率变化处理]]；编译要几分钟 → 配 ccache，见 [[ccache 与编译缓存]]。
+**耗时与卡点**：20–35 小时，其中**至少一半花在工具链而不是 DSP 上**。插件在 DAW 里根本不出现 → 扫描机制、安装路径、格式没勾选，见 [[插件扫描机制]]；一加载就崩 → 构造函数里做了重活；改采样率后声音错乱 → 系数只在构造函数里算过一次，见 [[采样率变化处理]]。
 
 ## 阶段 5：加上 GUI 和参数
 
@@ -367,16 +363,14 @@ private:
 
 | 卡点 | 一句实用建议 |
 |---|---|
-| **编译错误看不懂** | **永远从输出的第一行读起**。C++ 编译器会因为一个缺失的分号报出 200 行错误 |
-| **链接错误（linker error）** | 不是语法错误，是"找不到实现"或"实现了两次"：函数声明了没定义？`.cpp` 忘了加进构建？头文件里定义了函数（应加 `inline` 或挪到 `.cpp`）？ |
+| **编译 / 链接错误** | 编译错误**永远从输出的第一行读起**（一个缺失的分号能报出 200 行）。链接错误（linker error）不是语法问题，是"找不到实现"或"实现了两次"：函数声明了没定义？`.cpp` 忘了加进构建？头文件里定义了函数？ |
 | **段错误（segfault）** | 99% 是访问了不该访问的内存（空指针、越界、用了已释放的对象）。**用 `-fsanitize=address` 重编译**，见 [[AddressSanitizer]] |
 | **浮点精度 / 越界** | `float` 只有约 7 位有效数字——**滤波器内部状态、长时间累加用 `double`**。`std::vector::operator[]` **不做边界检查**，调试时用 `.at()` 或 ASan |
-| **头文件与实现分离** | 两条：**声明放 `.h`，定义放 `.cpp`**；头文件里只放 `inline` 函数和类定义 |
+| **头文件与实现分离** | **声明放 `.h`，定义放 `.cpp`**；头文件里只放 `inline` 函数和类定义 |
 | **构建系统** | 抄一个能用的模板改路径和文件名，**别从零写 CMakeLists**。见 [[CMake 基础]] |
 | **符号约定 / 类型混用** | 不同资料的差分方程符号约定不同，抄公式前先确认（见 [[Biquad 滤波器]]）；`size_t` 无符号，`for (int i = v.size() - 1; i >= 0; --i)` 是死循环陷阱 |
 | **Debug 能跑，Release 崩** | 未定义行为（UB）的典型特征。**UB 不是"随机"，是"编译器可以随便处理"**，见 [[UndefinedBehaviorSanitizer]] |
-| **插件在宿主里行为不同** | 先把同一个二进制当 Standalone 跑，分流"宿主交互问题"还是"DSP 问题" |
-| **改一个参数就爆音** | 参数平滑，见 [[参数平滑 parameter smoothing]] |
+| **宿主里行为不同 / 改参数就爆音** | 先把同一个二进制当 Standalone 跑，分流"宿主交互问题"还是"DSP 问题"；拖动参数爆音 → 参数平滑，见 [[参数平滑 parameter smoothing]] |
 
 > [!danger] 特别警告：AI 生成的 C++ 代码对新手特别危险
 > 原因不是"AI 写得差"，而是**它的失败模式恰好对新手最不友好**：
@@ -399,8 +393,7 @@ private:
 | 任务 | 为什么划算 |
 |---|---|
 | **写 Python 分析脚本** | FFT、画图、扫频生成、对比两个文件——"我懂要什么但不想查 API"的活，省 80% 时间，且错了立刻能看出来 |
-| **解释报错** | 把编译器输出整段贴给它。C++ 报错信息密度极低，这是 AI 最擅长的翻译工作 |
-| **解释不熟悉的语法** | `const auto&` 是什么意思、`override` 干什么用的，比翻书快 |
+| **解释报错 / 解释不熟悉的语法** | 把编译器输出整段贴给它；问 `const auto&` 是什么意思、`override` 干什么用的——比翻书快 |
 | **写测试用例与边界输入** | 让它生成"喂 0 长度缓冲区""喂 NaN""喂超范围参数"这类用例，你判断结果对不对 |
 | **写构建配置与样板代码** | CMakeLists、插件骨架、状态序列化——没有学习价值，抄就行 |
 | **当"源码导游" / 审查实时安全性** | 问它"`prepareToPlay` 会被调用几次""这个类的生命周期是什么"（见 [[用 AI 读懂 JUCE 源码]]）；或把 `processBlock` 贴给它问"这里有没有分配、加锁、阻塞" |

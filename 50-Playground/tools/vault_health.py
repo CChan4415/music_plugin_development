@@ -75,6 +75,12 @@ def main():
                 target = target[:-3]
             if '...' in target or target.startswith('10-Sources/'):
                 continue                  # 说明性占位符
+            # Obsidian 陷阱：链接名里含 "/" 会被当成路径 -> 永远解析不到。
+            # 这是**真实错误**，必须报告（不是待写队列）。
+            if '/' in target and not target.startswith('_meta/'):
+                problems['链接名含斜杠'].append(
+                    f"{rel}  ->  [[{target}]]   （文件名不能含 /，Obsidian 会当路径解析）")
+                continue
             target = Path(target).name
             if target in by_stem:
                 inbound[target] += 1
@@ -168,13 +174,13 @@ def main():
     single = len(queue) - len(hot)
     print(f"\n   另有 {single} 个只被引用一次的待写链接（正常，不用管）")
 
-    order = ['孤儿页', '缺 frontmatter', 'frontmatter 字段不全',
+    order = ['链接名含斜杠', '孤儿页', '缺 frontmatter', 'frontmatter 字段不全',
              '非法 type', '日期格式错', '长期未更新', 'Sources 可能被改过']
     for key in order:
         items = problems.get(key, [])
         if not items:
             continue
-        icon = '⚠️ ' if key in ('Sources 可能被改过',) else '·'
+        icon = '⚠️ ' if key in ('Sources 可能被改过', '链接名含斜杠') else '·'
         print(f"\n── {icon}{key} ({len(items)}) ──")
         for it in items[:25]:
             print(f"    {it}")
@@ -186,6 +192,7 @@ def main():
 
     print(f"\n{'='*64}")
     print("  待写队列不是错误 —— 它是这个知识库的 TODO 列表，按需求排序。")
+    print("  ⚠️ 标记的才是真错误，需要修。")
     print("  想开始写的时候，从引用数最高的那个开始。")
     print(f"{'='*64}\n")
 

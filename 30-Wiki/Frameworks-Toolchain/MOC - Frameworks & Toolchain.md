@@ -89,7 +89,7 @@ flowchart TD
 - [[Faust]] — 函数式 DSP 语言，**写算法不写 C++**，可导出 C++ / JUCE / 插件骨架；做算法原型极快。
 - [[Faust 与 JUCE 的集成]] — 用 Faust 生成 DSP、用 JUCE 做外壳与 UI 的混合工作流。
 - [[Cmajor]] — 面向实时音频的类 C 语言，强调低延迟与可预测性。
-- [[Max/MSP 与 RNBO]] — 图形化打补丁，RNBO 可导出为插件/网页；**原型阶段无敌，产品阶段受限**。
+- [[Max MSP 与 RNBO]] — 图形化打补丁，RNBO 可导出为插件/网页；**原型阶段无敌，产品阶段受限**。
 - [[SuperCollider]] — 面向声音合成的语言与服务器架构；适合实验与算法探索。
 - [[Pure Data]] — 开源图形化环境，pd 补丁可嵌入插件（libpd）。
 - [[Csound]] — 历史悠久的音频编程语言，适合算法教学与传统合成技术。
@@ -122,8 +122,8 @@ flowchart TD
 - [[Xcode 与命令行构建]] — 什么时候用 Xcode GUI，什么时候必须回到命令行。
 - [[Ninja 与构建速度]] — 为什么 Ninja 比 Make 快，以及怎么和 CMake 配合。
 - [[ccache 与编译缓存]] — JUCE 项目编译时间长，缓存是刚需。
-- [[依赖管理：CPM / FetchContent / vcpkg]] — 三种拉依赖方式的取舍，以及"该不该 vendor 进仓库"。
-- [[构建配置：Debug / Release / RelWithDebInfo]] — 音频插件的 Debug 构建为什么慢到不能用。
+- [[依赖管理 CPM 与 FetchContent 与 vcpkg]] — 三种拉依赖方式的取舍，以及"该不该 vendor 进仓库"。
+- [[构建配置 Debug 与 Release]] — 音频插件的 Debug 构建为什么慢到不能用。
 - [[交叉编译与多平台构建]] — macOS 上构建 Windows 版本可行吗（大概率不可行，需核实）。
 
 > [!warning] 待验证
@@ -188,7 +188,7 @@ flowchart TD
 - [[macOS 公证 (notarization)]] — `notarytool` 流程与常见拒绝原因。
 - [[签名与公证的自动化脚本]] — 把签名→公证→装订（staple）串成一条命令。
 - [[Windows 代码签名]] — 与 macOS 完全不同的体系；SmartScreen 信誉积累。
-- [[安装包制作：Inno Setup / Packages / DMG]] — Windows 与 macOS 各自的方案选择。
+- [[安装包制作 Inno Setup 与 Packages 与 DMG]] — Windows 与 macOS 各自的方案选择。
 - [[插件安装路径规范]] — VST3 / AU / CLAP / AAX 各自该装到哪，系统级与用户级之别。
 - [[版本号与更新分发]] — 语义化版本、更新检查机制、增量更新。
 - [[开源仓库结构范例]] — 一个别人愿意 star 的插件仓库长什么样（README、LICENSE、示例、CI 徽章）。
@@ -202,7 +202,7 @@ flowchart TD
 > 但**AI 在 C++ 音频项目里的实际效果，和它在 Web/脚本项目里的口碑差距很大**——原因值得写清楚。
 
 - [[AI 辅助 C++ 音频开发的真实效果]] — 哪些任务它很强，哪些任务它会稳定地坑你。
-- [[Cursor / Claude Code / Copilot 在 C++ 项目中的对比]] — 上下文理解、大仓库表现、重构能力。
+- [[AI 编程助手在 C++ 音频项目中的对比]] — 上下文理解、大仓库表现、重构能力。
 - [[为什么 AI 写不好实时音频代码]] — 它默认写出带锁、带分配、带异常的"教科书 C++"，而那正是音频线程的禁忌。
 - [[用 AI 读懂 JUCE 源码]] — 把 AI 当"源码导游"而不是"代码生成器"。
 - [[用 Agent 做 DSP 参数搜索]] — 让 Agent 批量跑离线渲染、对比指标、给出候选参数。

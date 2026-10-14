@@ -1,0 +1,110 @@
+---
+title: Agent 维护契约
+type: meta
+status: solid
+updated: 2026-10-14
+---
+
+# Agent 维护契约
+
+> 任何 AI Agent（Claude Code / Codex / Cursor / DeepSeek Harness）在本知识库中工作时，**必须**遵守本文件。
+> 人类协作者也应遵守——这套规则的价值来自一致性。
+
+## 0. 第一原则
+
+**知识的价值 = 可溯源 × 可复用 × 可推翻。**
+任何降低这三者的操作都是错的，哪怕它让笔记看起来更整洁。
+
+## 1. 硬性禁令
+
+| 禁令 | 原因 |
+|---|---|
+| ❌ 不得修改 `10-Sources/` 下的任何文件 | 原始资料是唯一的真相锚点。改了就再也无法验证结论 |
+| ❌ 不得删除、重命名任何文件（除非人类明确要求） | 链接会断，历史会丢 |
+| ❌ 不得修改 `.obsidian/` 配置 | 会破坏人类的阅读环境 |
+| ❌ 不得在 `30-Wiki/` 写无法溯源的事实性断言 | 见 §3 |
+| ❌ 不得在没有先搜索的情况下创建新 Wiki 页 | 重复页是知识库的头号杀手 |
+
+## 2. 工作流
+
+```
+新资料 → 00-Inbox/
+   ↓  Agent 处理
+10-Sources/xxx.md        摘要 + 元数据 + 原文链接（此后只读）
+   ↓  提炼
+20-Notes/xxx.md          人类的理解与判断（Agent 可起草，需人类确认）
+   ↓  综合
+30-Wiki/<Domain>/xxx.md  主题知识页（Agent 主要战场）
+```
+
+**处理 Inbox 的标准动作**：
+1. 读 `00-Inbox/` 全部内容
+2. 搜索 `30-Wiki/` 是否已有相关页（用关键词 + 同义词 + 标签）
+3. **先输出计划**：打算新建哪些页、更新哪些页、有哪些不确定
+4. 等人类确认后执行
+5. 报告：改了什么、新增了什么、哪些结论需要人类核实
+
+## 3. 溯源规则（最重要）
+
+`30-Wiki/` 中每条事实性断言必须满足以下**之一**：
+
+- `[[10-Sources/...]]` — 有来源
+- `<!-- derived -->` 标记 — 从多条来源推导得出（需列出推导链）
+- `> [!warning] 未验证` callout — 明确标记为待验证的推测
+- 属于**公认常识**（如"采样率决定奈奎斯特频率"）— 无需标注
+
+**禁止**：把 Agent 自己的推理写得像文献结论一样确定。
+
+## 4. Frontmatter 规范
+
+所有 Wiki / Note 页必须含：
+
+```yaml
+---
+title: 人类可读标题
+type: wiki | note | source | decision | project | experiment | meta
+domain: audio-fundamentals | dsp | realtime | formats | frameworks | ui | psychoacoustics | ai-audio | craft
+status: stub | seed | solid | stale
+confidence: low | medium | high     # 你对该内容正确性的信心
+sources: ["[[...]]"]                 # 仅 wiki/note 页
+tags: []
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+---
+```
+
+- `stub` = 只有骨架和"这里该放什么"
+- `seed` = 有实质内容但未验证
+- `solid` = 已验证 / 有来源 / 实践过
+- `stale` = 可能过时（框架 API 变更等）
+
+## 5. 写作规范
+
+- **先搜后写**：创建新页前必须 grep 现有页
+- **优先更新，而非新建**：相关主题合并到已有页
+- **链接而非复制**：`[[Biquad 滤波器]]` 而不是把公式再抄一遍
+- **区分事实与判断**：`> [!note] 我的判断` 用于主观意见
+- **保留冲突**：两个来源矛盾时，两个都写下来并标记 `> [!warning] 来源冲突`
+- **写"为什么"**：对比页要写取舍理由，而不只是罗列特性
+
+## 6. 语言约定
+
+正文用中文，**技术术语保留英文原文**（首次出现时中英并列，如"过采样（oversampling）"）。
+代码、公式、API 名称一律用英文。
+
+## 7. 每次会话结束前
+
+- [ ] 更新被改动页面的 `updated` 字段
+- [ ] 更新 [[Home]] 或对应 MOC 的入口链接
+- [ ] 把新出现的疑问写进 [[_meta/open-questions]]
+- [ ] `git commit`（见 §8）
+
+## 8. 版本控制
+
+本知识库是 git 仓库。建议节奏：
+
+```bash
+git add -A && git commit -m "wiki: 新增 Biquad 滤波器页"
+```
+
+Agent 在做**大规模改写**（>5 个文件）前必须先 commit 一次，以便回滚。

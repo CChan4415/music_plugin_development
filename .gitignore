@@ -1,0 +1,23 @@
+# Obsidian 状态文件（每台机器不同，不该共享）
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.trash/
+
+# macOS
+.DS_Store
+
+# 构建产物（Playground 里的实验代码）
+50-Playground/**/build/
+50-Playground/**/cmake-build-*/
+50-Playground/**/*.o
+50-Playground/**/node_modules/
+
+# 大文件
+*.wav
+*.aif
+*.aiff
+*.flac
+*.mp3
+*.dmg
+*.pkg

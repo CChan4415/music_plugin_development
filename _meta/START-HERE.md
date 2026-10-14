@@ -204,7 +204,8 @@ afplay sine440.wav     # macOS 自带播放
 ### 可以立刻跑的四个实验
 
 ```bash
-PY=/Users/cc/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/python/bin/python3
+# 用你自己的 Python（需要 numpy）
+PY=python3
 
 bash 50-Playground/exp-000-环境检查/check_env.sh        # 先看环境
 $PY  50-Playground/exp-001-第一声/demo.py --no-play      # 听到 440Hz

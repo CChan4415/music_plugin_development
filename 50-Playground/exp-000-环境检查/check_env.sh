@@ -13,7 +13,7 @@ warn() { printf "  ⚠️  %-28s %s\n" "$1" "$2"; }
 
 echo "── 阶段 1 需要（Python DSP）──"
 # 提示：DSH 内置的 python 已有 numpy，但你可能想用自己的环境
-DSH_PY="/Users/cc/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/python/bin/python3"
+DSH_PY="$HOME/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/python/bin/python3"
 if [ -x "$DSH_PY" ] && "$DSH_PY" -c "import numpy" 2>/dev/null; then
   echo "  💡 DSH 内置 Python 已有 numpy:"
   printf "     %s\n" "$DSH_PY"

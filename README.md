@@ -2,12 +2,28 @@
 
 一个用 **Obsidian 当界面、Agent 当维护者**的个人知识库，主题是：**音乐制作插件的开发**。
 
+> [!note] 这是什么
+> 作者是前电子音乐制作人 + 计算机专业背景，正在从零学 C++ 和 DSP，
+> 目标是做自己的音频插件（VST3/AU）。
+>
+> **这个库的核心用途**：让 AI 写代码，自己审阅、测试、理解原理。
+> 所以每个知识页都有 **「AI 会怎么写错」** 一节——那是核对 AI 输出的清单。
+>
+> 想直接看内容，从 [[Home]] 或 [[_meta/START-HERE|从这里开始]] 进。
+
 ## 30 秒上手
 
-1. Obsidian → `Open folder as vault` → 选择本目录 `/Users/cc/workspace/music_plugin_development`
+1. Obsidian → `Open folder as vault` → 选择**本目录**（你 clone 下来的那个文件夹）
 2. 从 [[Home]] 开始
 3. 有新材料 → 丢进 `00-Inbox/`
 4. 让 Agent 整理 → 它会按 [[AGENTS]] 里的契约工作
+
+> [!tip] 不需要 Obsidian 也能读
+> 所有内容是纯 Markdown。`[[双向链接]]` 在 GitHub 上不会渲染成链接，
+> 但用 Obsidian 打开就能正常跳转。
+>
+> 想跑代码实验：见 [[50-Playground/tools/README|工具说明]]，
+> 只需要 Python + numpy。
 
 ## 三层结构（别打破它）
 

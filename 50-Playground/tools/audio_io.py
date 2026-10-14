@@ -94,10 +94,35 @@ def dominant_freq(x, sr):
     return float(np.fft.rfftfreq(len(x), 1.0 / sr)[np.argmax(X)])
 
 
-def spectrum(x, sr, ref_db=0.0):
-    """返回 (频率数组, dB 幅度数组)，可直接画图。"""
+def spectrum(x, sr, ref_db=0.0, window='hann'):
+    """返回 (频率数组, dB 幅度数组)，可直接画图。
+
+    ⚠️ 归一化陷阱（本函数已修正）:
+        加窗会衰减信号，必须用 **窗函数之和** 归一化，而不是样本数 N。
+
+        Hann 窗的「相干增益」= 0.5，所以用 *2/N 归一化会得到
+        **比真实幅度低 6 dB** 的结果 —— 而它看起来完全合理，极难发现。
+
+        实测（0.5 幅度正弦 @440Hz, 48kHz, 1秒）:
+            无窗:    *2/N → 0.5000 ✅
+            Hann窗:  *2/N → 0.2500 ❌ (-6dB 误差)
+            Hann窗:  *2/sum(w) → 0.5000 ✅  ← 本函数采用
+
+    参数:
+        window: 'hann' | 'hamming' | 'blackman' | None（不加窗）
+    """
     x = np.asarray(x, dtype=np.float64).ravel()
-    X = np.abs(np.fft.rfft(x * np.hanning(len(x)))) * 2.0 / len(x)
+    if window is None:
+        w = np.ones(len(x))
+    else:
+        # numpy 的函数名和常用名不完全一致（hann -> hanning）
+        _WINDOWS = {'hann': np.hanning, 'hamming': np.hamming,
+                    'blackman': np.blackman, 'bartlett': np.bartlett}
+        if window not in _WINDOWS:
+            raise ValueError(f"未知窗函数 {window!r}，可选: {list(_WINDOWS)} 或 None")
+        w = _WINDOWS[window](len(x))
+    # 除以窗之和（相干增益补偿），不是除以 N
+    X = np.abs(np.fft.rfft(x * w)) * 2.0 / np.sum(w)
     f = np.fft.rfftfreq(len(x), 1.0 / sr)
     return f, db(X) + ref_db
 

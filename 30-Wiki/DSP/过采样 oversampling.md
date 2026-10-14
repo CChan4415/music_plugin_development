@@ -27,7 +27,36 @@ updated: 2026-10-14
 
 ---
 
-## 一、完整信号流图
+## 一、音乐人的听感 ↔ 过采样能修什么 ⭐
+
+> [!important] 这一节先回答"我为什么要用它"
+> 你听过的问题里，**只有一部分是过采样能修的**。
+> 搞错这一点，你会给所有插件都加过采样，然后发现"声音没变好，CPU 变高了"。
+
+| 你的听感 | 过采样能修吗 | 工程原因 |
+|---|---|---|
+| 高频失真"沙沙"/"塑料味" | ✅ **能——这就是它的主要用途** | 混叠被推到超声频段后滤掉 |
+| 高音区音色变脏 | ✅ 能 | 越界谐波不再折返 |
+| "越加失真越糊" | ✅ 能（明显改善） | 高次谐波被正确滤除，而非折叠回来 |
+| 失真听起来**闷**、没有空气感 | ❌ **不能，甚至可能更糟** | 抗混叠滤波器通带太窄 |
+| 低频"糊" | ❌ 不能 | 相位失真或掩蔽效应，见 [[Biquad 滤波器]] |
+| 混响/延迟有"金属味" | ❌ **不能** | 那是梳状滤波驻波，见 [[混响的原理]] |
+| 调参数有"阶梯感"（zipper noise） | ❌ 不能 | 参数平滑问题，见 [[参数平滑 parameter smoothing]] |
+| 声音"贴脸"、没有空间感 | ❌ 不能 | 缺 pre-delay / 早期反射 |
+| **鼓组瞬态变软** | ❌ 不能——**过采样反而可能引入** | 用了 IIR 过采样 → 相位失真；应改线性相位 FIR |
+
+> [!warning] 最重要的一行是"鼓组瞬态变软"
+> 过采样**不是**免费的。用错滤波器类型（IIR）会引入相位失真，
+> 而相位失真**恰好**表现为"瞬态变软"——正是失真插件最不该失去的东西。
+> 见第四节"相位失真"。
+
+> [!note] 一个反直觉但重要的判断
+> **如果你开了过采样却听不出区别，那是正常的**——说明你的素材本来就没产生可闻的混叠。
+> 过采样是**修正错误**，不是**音色塑造**。
+> 它不该让声音"变好听"，只该让声音"变回正确"。
+> 混叠本身的听感对应表在 [[混叠 aliasing]] 第三节。
+
+## 二、完整信号流图
 
 ```mermaid
 graph LR
@@ -71,7 +100,7 @@ ASCII 版（便于在终端里记）：
 
 ---
 
-## 二、倍数怎么选
+## 三、倍数怎么选
 
 ### 内部奈奎斯特频率（基准 48 kHz）
 
@@ -170,7 +199,7 @@ ASCII 版（便于在终端里记）：
 
 ---
 
-## 三、滤波器设计
+## 四、滤波器设计
 
 ### 半带滤波器（half-band filter）—— 多级 2x 的标准做法
 
@@ -243,7 +272,7 @@ JUCE 的 `addOversamplingStage()` 允许给升采样和降采样**分别**指定
 
 ---
 
-## 四、延迟代价
+## 五、延迟代价
 
 ### 延迟估算公式
 
@@ -306,7 +335,7 @@ void prepareToPlay (double sampleRate, int samplesPerBlock) override
 
 ---
 
-## 五、CPU 代价
+## 六、CPU 代价
 
 > [!important] 核心原则：**只对非线性部分过采样**
 > 4x 过采样 = **4 倍样本数**。如果整条处理链都在 4x 下跑，
@@ -345,7 +374,7 @@ return oversampleDown (sat);
 
 ---
 
-## 六、实现方式
+## 七、实现方式
 
 ### 方式 1：JUCE 的 `juce::dsp::Oversampling`（推荐起点）
 
@@ -416,7 +445,7 @@ private:
 
 ```cpp
 // ① 半带 FIR：窗函数法，截止 = fs/4。奇数长度、对称 → 线性相位；
-//    除中心外偶数抽头全为 0 → 可跳过一半乘法（半带高效的原因）
+//    除中心外偶数抽头全为 0 → 可跳过一半乘法（这是半带高效的原因）
 static std::vector<float> designHalfBand (int taps)
 {
     std::vector<float> h ((size_t) taps);
@@ -435,7 +464,7 @@ static std::vector<float> designHalfBand (int taps)
     return h;
 }
 
-// ② 线性相位 FIR。**不补偿延迟** —— 实时插件必须如实保留并报告它
+// ② 线性相位 FIR 延迟线。**不补偿延迟** —— 实时插件必须如实保留并报告它
 struct Fir
 {
     std::vector<float> h, z;
@@ -451,52 +480,44 @@ struct Fir
     void reset() { std::fill (z.begin(), z.end(), 0.0f); }
 };
 
-// ③ 2x 升采样：插零 + 抗镜像低通（×2 补偿插零造成的能量减半）
-struct Upsampler2x
+// ③④ 升/降采样各一个 2x 级：升 = 插零 + 低通；降 = 低通 + 抽取
+struct Stage2x
 {
-    Fir fir;
-    explicit Upsampler2x (int taps) : fir (designHalfBand (taps)) {}
-    void process (const float* in, int n, std::vector<float>& out)
+    Fir up { designHalfBand (63) }, dn { designHalfBand (63) };
+
+    void upsample (const float* in, int n, std::vector<float>& out)
     {
         out.resize ((size_t) n * 2);
         for (int i = 0; i < n; ++i)
         {
-            out[(size_t) (2 * i)]     = fir.process (2.0f * in[i]);
-            out[(size_t) (2 * i + 1)] = fir.process (0.0f);          // 插零
+            out[(size_t) (2 * i)]     = up.process (2.0f * in[i]);  // ×2 补偿能量
+            out[(size_t) (2 * i + 1)] = up.process (0.0f);          // 插零
         }
     }
-};
-
-// ④ 2x 降采样：抗混叠低通 + 抽取
-struct Downsampler2x
-{
-    Fir fir;
-    explicit Downsampler2x (int taps) : fir (designHalfBand (taps)) {}
-    void process (const float* in, int n, std::vector<float>& out)
+    void downsample (const float* in, int n, std::vector<float>& out)
     {
         out.resize ((size_t) n / 2);
         for (int i = 0; i < n; ++i)
         {
-            const float y = fir.process (in[i]);
-            if (i % 2 == 0) out[(size_t) (i / 2)] = y;    // 抽取
+            const float y = dn.process (in[i]);
+            if (i % 2 == 0) out[(size_t) (i / 2)] = y;             // 抽取
         }
     }
 };
 
-// ⑤ 串联成 4x —— 这就是第一节那张流图的代码形式
-Upsampler2x   up1 { 63 }, up2 { 63 };      // 1x→2x→4x
-Downsampler2x dn1 { 63 }, dn2 { 63 };      // 4x→2x→1x
+// ⑤ 串联两级 = 4x —— 这就是第二节那张流图的代码形式
+Stage2x stageA, stageB;
 
 void process4x (const float* in, int n, float* out, float drive)
 {
     std::vector<float> a, b;
-    up1.process (in, n, a);                                    // 升采样
-    up2.process (a.data(), (int) a.size(), b);
+    stageA.upsample (in, n, a);                                  // 1x → 2x
+    stageB.upsample (a.data(), (int) a.size(), b);               // 2x → 4x
 
-    for (auto& v : b) v = std::clamp (v * drive, -1.0f, 1.0f);  // ← 唯一的非线性
+    for (auto& v : b) v = std::clamp (v * drive, -1.0f, 1.0f);   // ← 唯一的非线性
 
-    dn1.process (b.data(), (int) b.size(), a);                  // 降采样
-    dn2.process (a.data(), (int) a.size(), b);
+    stageB.downsample (b.data(), (int) b.size(), a);             // 4x → 2x
+    stageA.downsample (a.data(), (int) a.size(), b);             // 2x → 1x
     std::copy (b.begin(), b.begin() + n, out);
 }
 ```
@@ -517,7 +538,7 @@ void process4x (const float* in, int n, float* out, float drive)
 
 ---
 
-## 七、什么时候**不需要**过采样
+## 八、什么时候**不需要**过采样
 
 > [!important] 这一节和上一节同样重要
 > 无脑给所有插件加过采样，是**用 CPU 换一个不存在的改善**。
@@ -546,7 +567,7 @@ void process4x (const float* in, int n, float* out, float drive)
 
 ---
 
-## 八、AI 会怎么写错
+## 九、AI 会怎么写错
 
 > [!danger] 本节是本页最实用的部分
 
@@ -596,7 +617,7 @@ y = saturator.process (y);
 return oversampleDown (y);
 ```
 
-**正确**：只有非线性进过采样区（见第五节）。
+**正确**：只有非线性进过采样区（见第六节）。
 
 ### 错误 5：JUCE 的 `factor` 参数当成倍率
 
@@ -625,16 +646,16 @@ void prepareToPlay (double, int) override { /* 没 reset */ }
 
 AI 可能说："过采样会削掉高频，所以声音会变闷。"
 **这是滤波器设计不当的症状，不是过采样的固有属性。**
-正确设计的过采样在 20 kHz 以内应该**完全透明**（见第六节实测表）。
+正确设计的过采样在 20 kHz 以内应该**完全透明**（见第七节实测表）。
 
 ---
 
-## 九、常见坑
+## 十、常见坑
 
 | 症状 | 原因 | 解法 |
 |---|---|---|
 | 加了过采样但混叠没改善 | 降采样前没低通（只升不滤） | 抽取前必须低通 |
-| 提高倍率没效果 | 滤波器阻带衰减不够（**瓶颈在滤波器**） | 增加 taps（见第二节表） |
+| 提高倍率没效果 | 滤波器阻带衰减不够（**瓶颈在滤波器**） | 增加 taps（见第三节表） |
 | 声音变闷 / 高频损失 | 抗混叠滤波器通带太窄 | 放宽通带，增加 taps，检查 $f_c$ |
 | 插件挂上后鼓组散掉 | 没报告 latency | `setLatencySamples()` |
 | 干湿混合相位抵消 | 干信号没和过采样后的湿信号对齐 | 报告延迟，或延迟干信号 |
@@ -651,7 +672,7 @@ AI 可能说："过采样会削掉高频，所以声音会变闷。"
 
 ---
 
-## 十、怎么验证
+## 十一、怎么验证
 
 ### 核心验证方法：喂高频正弦，看有没有**非谐波**成分
 
@@ -682,7 +703,7 @@ for factor in (2, 4, 8, 16):
 
 > [!warning] 这个输出正好演示了"瓶颈在滤波器"
 > 2x→16x 几乎没改善，因为 `taps=63` 的阻带衰减已经到极限了。
-> **把 `taps` 改成 255，你才会看到倍率的效果**（见第二节的表）。
+> **把 `taps` 改成 255，你才会看到倍率的效果**（见第三节的表）。
 
 ### 验证清单
 
@@ -739,5 +760,5 @@ for factor in (2, 4, 8, 16):
 > [!warning] 待验证
 > - 本页 JUCE 相关的 API 用法**均未在本机编译验证**（本机没有 JUCE 环境）。
 >   代码基于官方头文件编写，第一次使用前请编译最小工程确认。
-> - 第二节"选择建议"里的倍率推荐是基于本页实测数据的**工程判断**，
+> - 第三节"选择建议"里的倍率推荐是基于本页实测数据的**工程判断**，
 >   不是从资料推导的结论。实际项目请以你自己的 CPU 与听感测试为准。

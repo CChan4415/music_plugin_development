@@ -119,7 +119,9 @@ class Allpass:
     def process_sample(self, x):
         buf_out = self.buf[self.i]
         y = -x + buf_out
-        self.buf[self.i] = x + buf_out * self.fb
+        # ⚠️ 必须存 x + y·fb（用输出 y），不能存 x + buf_out·fb
+        # 否则不是全通，会变成谐振滤波器（g=0.7 时增益 2.63 倍）
+        self.buf[self.i] = x + y * self.fb
         self.i = (self.i + 1) % len(self.buf)
         return y
 

@@ -32,7 +32,7 @@ static double db (double x) { return 20.0 * std::log10 (std::abs (x) + 1e-30); }
 class LookaheadLimiter
 {
 public:
-    void prepare (double sr, int maxBlock)
+    void prepare (double sr, int /*maxBlock*/)
     {
         sampleRate = sr;
         lookaheadSamples = (int) std::round (0.005 * sr);      // 5 ms
@@ -201,54 +201,78 @@ static int testNullTest()
 
 // ─────────────────────────────────────────────────────────────
 //  测试 3: 状态残留 —— 旁路期间不跑 DSP 的后果
+//
+//  用一个**慢 release 的压缩器**演示（延迟线会自己排空，检测器不会）：
+//   策略 A「继续处理但输出干信号」: 检测器/增益平滑器一直在跑 → 状态是热的
+//   策略 B「完全跳过处理」        : 状态被冻结在旁路那一刻
+//  重新启用时，B 的增益值与"当前应有的值"差很远 → 增益跳变 → 爆音
 // ─────────────────────────────────────────────────────────────
+class SlowCompressor
+{
+public:
+    void prepare (double sr)
+    {
+        // release tau = 500 ms（很慢，所以状态"记得"很久以前的事）
+        relCoeff = 1.0f - std::exp (-1.0f / (float) (sr * 0.5));
+        atkCoeff = 1.0f - std::exp (-1.0f / (float) (sr * 0.005));
+        env = 0.0f; gainDb = 0.0f;
+    }
+
+    float currentGainDb() const noexcept { return gainDb; }
+
+    // 处理一个样本，返回应施加的线性增益（同时推进内部状态）
+    float step (float x) noexcept
+    {
+        const float a = std::abs (x);
+        env += ((a > env) ? atkCoeff : relCoeff) * (a - env);
+        const float xDb = 20.0f * std::log10 (env + 1e-9f);
+        const float targetDb = (xDb > -20.0f) ? (1.0f / 4.0f - 1.0f) * (xDb + 20.0f) : 0.0f;
+        gainDb += 0.0005f * (targetDb - gainDb);          // 慢平滑
+        return std::pow (10.0f, gainDb / 20.0f);
+    }
+
+private:
+    float atkCoeff = 0.0f, relCoeff = 0.0f, env = 0.0f, gainDb = 0.0f;
+};
+
 static int testStateStaleness()
 {
-    std::puts ("\n=== 3. 状态残留：旁路期间不跑 DSP 会怎样 ===");
-    const int N = 4096;
-    std::vector<float> in (N, 0.0f), out (N, 0.0f);
+    std::puts ("\n=== 3. 状态残留：旁路期间『跳过处理』vs『继续处理』===");
+    const int N = 96000;                     // 2 秒
+    std::vector<float> in (N, 0.0f);
+    // 前 0.5 秒：很强的信号（把压缩器推到深度压缩）
+    for (int i = 0; i < 24000; ++i)
+        in[(size_t) i] = (float) (0.95 * std::sin (2.0 * M_PI * 300.0 * i / kSampleRate));
+    // 之后：静音 1.5 秒
 
-    // 前 1/4 有强信号（让检测器/延迟线进入某个状态），之后静音
-    for (int i = 0; i < N / 4; ++i)
-        in[(size_t) i] = (float) (0.9 * std::sin (2.0 * M_PI * 200.0 * i / kSampleRate));
+    // 策略 B: 旁路期间完全跳过（状态冻结）
+    SlowCompressor compB; compB.prepare (kSampleRate);
+    for (int i = 0; i < 24000; ++i) compB.step (in[(size_t) i]);
+    const float frozenGainDb = compB.currentGainDb();
+    // 旁路 1 秒（完全不调用 step）
 
-    LookaheadLimiter lim;
-    lim.prepare (kSampleRate, kBlockSize);
+    // 策略 A: 旁路期间继续跑 DSP（状态保持热）
+    SlowCompressor compA; compA.prepare (kSampleRate);
+    for (int i = 0; i < 24000; ++i) compA.step (in[(size_t) i]);
+    for (int i = 24000; i < 72000; ++i) compA.step (in[(size_t) i]);   // 静音也跑
+    const float warmGainDb = compA.currentGainDb();
 
-    // 阶段 A: 激活处理强信号
-    for (int i = 0; i < N / 4; i += kBlockSize)
-    {
-        const int n = std::min (kBlockSize, N / 4 - i);
-        lim.processActive (in.data() + i, out.data() + i, n, 0.5f);
-    }
-    // 阶段 B: 旁路（不跑 DSP）—— 延迟线里仍然有 5ms 前的强信号
-    for (int i = N / 4; i < N / 2; i += kBlockSize)
-    {
-        const int n = std::min (kBlockSize, N / 2 - i);
-        lim.processBypassedRight (in.data() + i, out.data() + i, n);
-    }
-    // 阶段 C: 重新激活
-    for (int i = N / 2; i < N; i += kBlockSize)
-    {
-        const int n = std::min (kBlockSize, N - i);
-        lim.processActive (in.data() + i, out.data() + i, n, 0.5f);
-    }
+    std::printf ("   输入: 前 0.5 秒 0.95 满幅正弦，之后 1.5 秒静音\n");
+    std::printf ("   旁路 1 秒后重新启用时的增益值:\n");
+    std::printf ("     策略 B（跳过处理，状态冻结）= %+.2f dB\n", frozenGainDb);
+    std::printf ("     策略 A（继续处理）          = %+.2f dB\n", warmGainDb);
+    std::printf ("     差值                        = %.2f dB  ← 这就是增益跳变的幅度\n",
+                 std::abs (frozenGainDb - warmGainDb));
+    std::printf ("   折合线性增益跳变 = %.4f 倍\n",
+                 std::pow (10.0, std::abs (frozenGainDb - warmGainDb) / 20.0));
+    std::puts ("   → 策略 B 在重新启用的瞬间会把这个差值**一次性施加**到信号上。");
+    std::puts ("     如果信号正在响，这就是一个可闻的『咔哒』或电平跳变。");
+    std::puts ("   ⚠️ 但策略 A 有另一个代价: 旁路期间仍然消耗 CPU（用户以为省下来了）。");
+    std::puts ("   ✅ 工程上常见折中: 旁路时**继续跑状态更新但跳过昂贵的处理**，");
+    std::puts ("      或者在旁路↔激活的过渡上做 5–20 ms 的增益 crossfade。");
 
-    double maxAfterBypass = 0.0;
-    for (int i = N / 2; i < N; ++i)
-        maxAfterBypass = std::max (maxAfterBypass, (double) std::abs (out[(size_t) i]));
-
-    std::printf ("   输入在后 3/4 是**完全静音**（只有前 1/4 有信号）\n");
-    std::printf ("   旁路结束、重新激活后的最大输出 = %.3e (%.1f dBFS)\n",
-                 maxAfterBypass, db (maxAfterBypass));
-    std::puts ("   → 如果这个值不为 0，说明延迟线/检测器里**残留着旁路前的内容**，");
-    std::puts ("     在重新启用的瞬间被吐出来 = 一个可闻的瞬态/爆音。");
-    std::puts ("   ⚠️ 这是『旁路时继续处理但输出干信号』和『完全跳过』两种做法都会有的问题。");
-    std::puts ("     正确的处理是在**旁路→激活的过渡**上做增益淡入（crossfade）。");
-
-    const bool ok = maxAfterBypass > 1e-6;   // 我们**期望**观察到这个现象
-    std::printf ("   %s（预期观察到状态残留，这正是需要淡入的原因）\n",
-                 ok ? "✅ 已复现" : "（未复现）");
+    const bool ok = std::abs (frozenGainDb - warmGainDb) > 0.1f;
+    std::printf ("   %s（差值 > 0.1 dB，现象已复现）\n", ok ? "✅ 已复现" : "（未复现）");
     return ok ? 0 : 1;
 }
 

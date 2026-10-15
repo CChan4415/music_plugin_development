@@ -1,3 +1,15 @@
+---
+title: tools 说明
+type: meta
+domain: realtime
+status: solid
+confidence: high
+sources: []
+tags: []
+created: 2026-10-14
+updated: 2026-10-15
+---
+
 # 工具脚本
 
 跨实验复用的脚本。用 Python（numpy/scipy/matplotlib）。
@@ -19,4 +31,14 @@
 
 | 目录 | 说明 |
 |---|---|
-| `cpp/` | [[C++ 工具]] — 音频线程分配检测器 |
+| `cpp/` | [[C++ 工具]] — 音频线程分配检测器、DSP 微基准 |
+| `sanitizer/` | [[sanitizer 工具说明]] — ASan/UBSan 演示（实测抓到越界与五类 UB） |
+| `verify/` | 验证脚本（TPT SVF、梳状、FIR、IIR、极零点、振荡器混叠） |
+
+## 相关目录
+
+| 目录 | 说明 |
+|---|---|
+| `50-Playground/tests/` | [[tests 说明]] — 可复用的 unittest 测试套件 |
+| `50-Playground/ref-build/` | [[ref-build 说明]] — 最小构建示例（Makefile 已实测） |
+| `50-Playground/exp-004-非线性实测/` | [[exp-004 非线性实测]] — 谐波结构实验 |

@@ -1,5 +1,5 @@
 ---
-title: 测试目录说明
+title: tests 说明
 type: meta
 domain: realtime
 status: solid

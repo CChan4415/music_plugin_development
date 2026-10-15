@@ -1,5 +1,5 @@
 ---
-title: sanitizer 工具说明
+title: sanitizer 工具说明说明
 type: meta
 domain: realtime
 status: solid

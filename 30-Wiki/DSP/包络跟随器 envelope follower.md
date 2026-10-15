@@ -191,16 +191,31 @@ $$N_{eq} \approx \frac{2-\alpha}{\alpha} \approx 2\tau f_s$$
 
 ## 七、检测器前加高通（压缩器的标准做法）
 
-**实测**（120Hz 高通只加在检测路径）：
+**实测**（120 Hz 高通**只加在检测路径**）：
 
-| 信号 | 无高通 | 120Hz HP | 差 |
+| 信号 | 无高通 | 120 Hz HP（**二阶**） | 差 |
 |---|---|---|---|
-| **kick 单独** | -2.25 dBFS | -15.85 dBFS | **13.60 dB** |
-| mid 单独 | -16.51 | -15.90 | -0.61 dB |
+| **kick 单独**（55 Hz） | -2.25 dBFS | -15.85 dBFS | **13.60 dB** |
+| mid 单独（1 kHz） | -16.51 | -15.90 | -0.61 dB |
 | kick + mid | -0.79 | -10.27 | 9.48 dB |
 
+<!-- derived: 50-Playground/exp-004-dynamics-math/exp_envelope.py §7，2026-10-15 实测 -->
+
+> [!warning] 上表的 13.60 dB 是**二阶** Butterworth 的结果——一阶只有一半
+> 本库实测对比（55 Hz kick，同一检测器 τ_att=0.05 ms / τ_rel=100 ms）：
+>
+> | 高通实现 | 55 Hz 衰减 | 1 kHz 衰减 | kick+mid 检测电平 | 相对无高通 |
+> |---|---|---|---|---|
+> | 无 | — | — | -0.79 dBFS | — |
+> | **一阶**（12 dB/oct 以下） | -7.99 dB | +0.45 dB | -6.97 dBFS | **6.18 dB** |
+> | **二阶** Butterworth | **-13.60 dB** | +0.87 dB | -10.27 dBFS | **9.48 dB** |
+>
+> **一阶高通对 55 Hz 只有 8 dB 衰减，不足以解决"被 kick 触发"。**
+> 压缩器一般用**二阶**（或更高）。§8 的代码给的是二阶 biquad。
+> 如果你照 §8 之前的旧版一阶实现，只会得到约 6.2 dB，别以为自己做错了。
+
 > [!important] 高通只加在**检测路径**，音频路径不变
-> - kick 的检测电平掉 **13.6 dB** → 低频不再触发压缩
+> - kick 的检测电平掉 **13.6 dB**（二阶）→ 低频不再触发压缩
 > - 中频几乎不变（-0.61 dB）
 >
 > **这是压缩器的标准做法**，也是"为什么我的压缩器总被贝斯触发"的解法。
@@ -230,15 +245,32 @@ public:
     void setRelease (double ms) { releaseCoeff = coeffFor (ms); }
     void setHighpass (double hz)
     {
-        // 一阶高通: y = a*(yPrev + x - xPrev)
-        hpCoeff = (float) std::exp (-2.0 * M_PI * hz / sr);
+        // 二阶 Butterworth 高通（RBJ），见 [[Biquad 滤波器]]
+        // ⚠️ 一阶对 55Hz 只衰减 8dB，不够（见第七节）
+        const double w0 = 2.0 * M_PI * hz / sr;
+        const double cw = std::cos (w0);
+        const double alpha = std::sin (w0) / (2.0 * 0.7071067811865476);   // Q = 1/√2
+        const double a0 = 1.0 + alpha;
+
+        hpB0 = (float) ((1.0 + cw) / 2.0 / a0);
+        hpB1 = (float) (-(1.0 + cw) / a0);
+        hpB2 = hpB0;
+        hpA1 = (float) (-2.0 * cw / a0);
+        hpA2 = (float) ((1.0 - alpha) / a0);
+        resetHighpass();
     }
+
+    void resetHighpass() noexcept { hx1 = hx2 = hy1 = hy2 = 0.0f; }
 
     float process (float x)
     {
-        // 1. 检测路径高通（去掉低频）
-        const float hp = hpCoeff * (hpPrev + x - hpXPrev);
-        hpXPrev = x;  hpPrev = hp;
+        // 1. 检测路径高通（去掉低频）—— 二阶 Butterworth
+        const float hp = hpB0 * x + hpB1 * hx1 + hpB2 * hx2
+                       - hpA1 * hy1 - hpA2 * hy2;
+        hx2 = hx1;  hx1 = x;
+        // ⚠️ 状态必须防 denormal（见 [[denormal 数处理]]）
+        hy2 = hy1;
+        hy1 = (std::abs (hp) < 1.0e-30f) ? 0.0f : hp;
 
         if (mode == Mode::RMS)
         {
@@ -261,7 +293,9 @@ private:
     Mode mode = Mode::Peak;
     float env = 0.0f, meanSq = 0.0f;
     float attackCoeff = 0.01f, releaseCoeff = 0.0001f;
-    float hpCoeff = 0.98f, hpXPrev = 0.0f, hpPrev = 0.0f;
+    // 二阶高通（biquad）系数与状态
+    float hpB0 = 1.0f, hpB1 = 0.0f, hpB2 = 0.0f, hpA1 = 0.0f, hpA2 = 0.0f;
+    float hx1 = 0.0f, hx2 = 0.0f, hy1 = 0.0f, hy2 = 0.0f;
 
     float coeffFor (double ms) const
     {

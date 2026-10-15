@@ -737,7 +737,7 @@ for factor in (2, 4, 8, 16):
 - [[混叠 aliasing]] — 本页要解决的问题，**先读它**
 - [[非线性处理]] — 什么时候必须过采样
 - [[半带滤波器]] — 多级 2x 的核心组件
-- [[多速率处理 multirate]] · [[重采样 resampling]] — 更系统的多速率理论
+- [[多速率处理 multirate]] · [[采样率转换 resampling]] — 更系统的多速率理论
 - [[抗混叠振荡器]] — 振荡器的另一条路（BLEP / DPW）
 - [[FIR 滤波器]] — 线性相位与延迟的来源
 - [[延迟报告 latency reporting]] — `setLatencySamples` 的完整规则

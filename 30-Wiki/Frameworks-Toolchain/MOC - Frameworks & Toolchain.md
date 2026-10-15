@@ -382,7 +382,7 @@ auval -v aufx <subtype> <manufacturer>   # 验证你的 AU
 
 > [!gotcha] 最常见的第一个坑
 > 旋钮直接乘到音频上会产生 **zipper noise（拉链噪声）**，尤其在快速拖动时。
-> 正确做法是参数平滑（smoothed value）。见 [[参数平滑与去拉链]]。
+> 正确做法是参数平滑（smoothed value）。见 [[参数平滑 parameter smoothing]]。
 
 ### 步骤 8：验证与签名（发布前）
 

@@ -72,10 +72,14 @@ for name, bits in [("int16", 16), ("int24", 24), ("int32", 32)]:
     dr = 6.02 * bits
     lsb = -20 * np.log10(2 ** (bits - 1))
     print(f"   {name:>14}{dr:>20.1f}{lsb:>20.2f}{'硬削波':>10}")
-print(f"   {'float32':>14}{'~1529':>20}{'-138.5(近 ±1.0)':>20}{'可超 1.0':>10}")
+print(f"   {'float32':>14}{'1529.2':>20}{'-138.47(近 ±1.0)':>20}{'可超 1.0':>10}")
 print("   → 定点的动态范围**全在低位**（靠位深），float 的动态范围**全在高位**（靠指数）")
 print("     这就是『32-bit float 录音几乎不可能削波』的原因：")
 print("     超过 1.0 只是损失精度，不是丢数据")
+print("   ⚠️ 注意 float32 的『动态范围』有两个口径，差 140 dB:")
+print("     最小规格化 → 最大  = 1529.2 dB（常被引用）")
+print("     最小 denormal → 最大 = 1667.7 dB（含非规格化，一般不该用）")
+print("     而**有效精度**在 ±1.0 附近只有 138.5 dB（见第 2 节）")
 
 print("\n=== 5. NaN / Inf 的产生与传播 ===")
 a = F32(1.0); b = F32(0.0)
@@ -101,8 +105,9 @@ n_nan = int(np.sum(np.isnan(out)))
 first = int(np.argmax(np.isnan(out)))
 print(f"   注入位置: 样本 100 | 输出 NaN 数: {n_nan}/2000 | 首个 NaN 在样本 {first}")
 print(f"   → NaN 从注入点开始**永久污染**后面所有样本（IIR 状态被污染，永不自愈）")
-print(f"   验证: NaN 之后的样本有 {n_nan - (len(out)-first)} 个非 NaN? "
-      f"{'是' if n_nan < len(out)-first else '否 —— 全部是 NaN'}")
+n_after = int(np.sum(np.isnan(out[first:])))
+print(f"   注入点之后共 {len(out)-first} 个样本，其中 NaN = {n_after} "
+      f"({n_after/(len(out)-first)*100:.1f}%) → 无一幸存")
 
 print("\n   对比: 同样注入 Inf")
 sig2 = np.ones(2000, dtype=F32); sig2[100] = np.inf

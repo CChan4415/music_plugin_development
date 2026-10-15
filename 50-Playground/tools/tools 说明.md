@@ -41,4 +41,5 @@ updated: 2026-10-15
 |---|---|
 | `50-Playground/tests/` | [[tests 说明]] — 可复用的 unittest 测试套件 |
 | `50-Playground/ref-build/` | [[ref-build 说明]] — 最小构建示例（Makefile 已实测） |
+| `50-Playground/exp-007-心理声学/` | [[exp-007 心理声学实测]] — ISO 226 / K 加权 / Bark（子代理产出，Lead 复核） |
 | `50-Playground/exp-004-非线性实测/` | [[exp-004 非线性实测]] — 谐波结构实验 |

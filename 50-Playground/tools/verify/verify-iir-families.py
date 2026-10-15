@@ -1,4 +1,12 @@
-import numpy as np
+"""IIR 滤波器家族对比（Butterworth / Chebyshev / Bessel / Elliptic）
+
+⚠️ 状态：**部分可用**（2026-10-15）
+    6 阶设计在 48kHz 下数值不稳，部分行输出 NaN。
+    脚本能跑完不崩，但数据需要人工筛选。
+    → 用它看**定性趋势**可以，不要直接引用数字。
+    → 稳定的数据见 verify-svf-tuning.py（已验证）
+
+"""import numpy as np
 from math import factorial
 SR=48000.0; NFFT=1<<16
 
@@ -63,7 +71,16 @@ def metrics(h,sr=SR):
     sb=20*np.log10(H[np.argmin(np.abs(f-2*f3))]/dc+1e-30)
     ph=np.unwrap(np.angle(np.fft.rfft(h,NFFT))); w=2*np.pi*f/sr
     gd=-np.gradient(ph,w); b=(f>20)&(f<f3*0.5)
-    return f3,rip,trans,sb,gd[b].mean(),(gd[b].max()-gd[b].min())
+    # ⚠️ 保护：b 可能为空（f3 很小时）或含 NaN/Inf（不稳定滤波器）
+    gdb = gd[b]
+    if gdb.size == 0 or not np.all(np.isfinite(gdb)):
+        gd_mean = float('nan'); gd_ripple = float('nan')
+    else:
+        gd_mean = float(gdb.mean()); gd_ripple = float(gdb.max()-gdb.min())
+    # 同时保护 trans / sb
+    if not np.isfinite(trans): trans = float('nan')
+    if not np.isfinite(sb):    sb = float('nan')
+    return f3, rip, trans, sb, gd_mean, gd_ripple
 
 print("="*108)
 print("① 四大家族：6 阶，各自的 -3dB 点都归一化到 1000Hz，48kHz")

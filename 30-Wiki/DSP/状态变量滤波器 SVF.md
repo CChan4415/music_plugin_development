@@ -53,7 +53,7 @@ H_{hp}(z) = \frac{(1-z^{-1})^2}{D(z)}$$
 $$D(z) = 1 + a_1 z^{-1} + a_2 z^{-2},\qquad
 a_1 = f^2 + fq - 2,\qquad a_2 = 1 - fq$$
 
-**实测验证**（fc=1000 Hz，Q=1，脉冲响应 + 2^17 点 FFT，解析 vs 实测）：
+**实测验证**（fc=1000 Hz，Q=1，脉冲响应 + 2^17 点 FFT，解析 / 实测）：
 
 | 频率 | LP | BP | HP |
 |---|---|---|---|
@@ -63,8 +63,8 @@ a_1 = f^2 + fq - 2,\qquad a_2 = 1 - fq$$
 **最大绝对偏差 1.51e−4** ✅ 解析式正确。
 
 > [!warning] 注意 HP 在高频的增益**不是 1**
-> HP 在 20 kHz 是 **1.07506**（+0.63 dB）。这是 Chamberlin 的固有误差
-> （TPT 版本此处精确为 1.0000）。**"高通"要平坦到 Nyquist 就不能用 Chamberlin。**
+> HP 在 20 kHz 是 **1.07506**（+0.63 dB）——Chamberlin 的固有误差
+> （TPT 此处精确为 1.0000）。**"高通"要平坦到 Nyquist 就不能用 Chamberlin。**
 
 ---
 
@@ -113,24 +113,19 @@ $$f_{\max} = \frac{\sqrt{1 + 4Q^2} - 1}{Q},
 | 10.0 | 1.9025 | **19210 Hz** | 0.400 |
 
 > [!danger] 最容易踩的边界：**Q 越低，最高可用频率越低**
-> 常见说法是"f > 1（约 fs/6）开始出问题"，但那只是 Q≈0.7 的情形。
-> **Q=0.5 时 fc 上限只有 6525 Hz**——你在 48 kHz 下把 cutoff 拧到 8 kHz，
-> 滤波器就已经发散了。
->
-> 而且这个方向的直觉是反的：**加大 Q 反而更安全**（因为 $\sqrt{q^2+4}-q$ 随 q 减小而增大）。
+> 常见说法"f > 1（约 fs/6）开始出问题"只是 Q≈0.7 的情形。
+> **Q=0.5 时 fc 上限只有 6525 Hz**——48 kHz 下 cutoff 拧到 8 kHz 就已经发散。
+> 而且方向与直觉相反：**加大 Q 反而更安全**（$\sqrt{q^2+4}-q$ 随 q 减小而增大）。
 
 ```cpp
 // 关键：把 f 钳制在稳定边界内
 q = std::max (q, 0.05f);
 const float fMax = std::sqrt (q*q + 4.0f) - q;
+// ⚠️ std::min(..., 1.0f) 保护 asin：Q 很大时 fMax→2，参数超过 1 会返回 NaN
 const float fcMax = (float) (sr / M_PI) * std::asin (std::min (fMax * 0.5f, 1.0f));
 cutoffHz = std::clamp (cutoffHz, 5.0f, fcMax * 0.98f);   // 留 2% 余量
 f = 2.0f * std::sin ((float) M_PI * cutoffHz / (float) sr);
 ```
-
-> [!warning] 别忘了 `std::min(fMax * 0.5f, 1.0f)` 保护 `asin`
-> Q 很大时 $f_{\max} \to 2$，`asin` 的参数趋近 1；浮点误差让它超过 1 就返回 NaN
-> → **整个滤波器变 NaN**。
 
 ---
 
@@ -205,12 +200,11 @@ private:
         v0 = x;  v3 = v0 - ic2eq;
         v1 = a1 * ic1eq + a2 * v3;
         v2 = ic2eq + a2 * ic1eq + a3 * v3;
-        ic1eq = 2.0f * v1 - ic1eq;
+        ic1eq = 2.0f * v1 - ic1eq;                   // 状态更新（这就是"零延迟"）
         ic2eq = 2.0f * v2 - ic2eq;
     }
     double sr = 48000.0;
-    float a1 = 0.0f, a2 = 0.0f, a3 = 0.0f, k_ = 1.0f;
-    float ic1eq = 0.0f, ic2eq = 0.0f;
+    float a1 = 0.0f, a2 = 0.0f, a3 = 0.0f, k_ = 1.0f, ic1eq = 0.0f, ic2eq = 0.0f;
     float v0 = 0.0f, v1 = 0.0f, v2 = 0.0f, v3 = 0.0f;
 };
 ```
@@ -257,9 +251,8 @@ private:
 | 5 | **在音频线程调 `tan()`/`sin()`** | 违反实时契约（慢 + 可能不一致） | 参数变化时才算，或每 block 算一次 |
 | 6 | **三个输出用了不同的状态更新顺序** | 输出之间相位/幅度不匹配 | 三个 `processXxx` 必须共用同一次 `tick()` |
 | 7 | **每 block 只更新一次参数** | LFO 扫频有"阶梯感" | 每 sample 或每 32 samples 更新 |
-| 8 | **反馈路径没有 denormal 处理** | 安静时 CPU 飙升 | 见 [[denormal 数处理]] |
-| 9 | **左右声道共用状态** | 串音、立体声异常 | 每声道独立实例 |
-| 10 | **以为 SVF 的输出已经归一化** | HP 在高频是 1.075 而不是 1 | 见第二节的 HP 增益表 |
+| 8 | **反馈路径没有 denormal 处理 / 左右共用状态** | 安静时 CPU 飙升 / 串音 | 见 [[denormal 数处理]]；每声道独立实例 |
+| 9 | **以为 SVF 的输出已经归一化** | HP 在高频是 1.075 而不是 1 | 见第一节的 HP 增益表 |
 
 > [!danger] 第 1 条是最常见的"插件崩溃"
 > AI 写的 SVF 几乎总是**没有稳定性钳制**——因为教科书里也很少写。
@@ -323,8 +316,7 @@ def free_response_stable (f, q, n=200000):
 # 1) 稳定性边界必须等于 sqrt(q^2+4) - q
 for Q in [0.5, 1.0, 2.0]:
     q = 1.0/Q; bound = np.sqrt(q*q + 4) - q
-    assert free_response_stable (bound*0.9, q),     f"Q={Q}: 边界内应稳定"
-    assert not free_response_stable (bound*1.1, q), f"Q={Q}: 边界外应发散"
+    assert free_response_stable (bound*0.9, q) and not free_response_stable (bound*1.1, q)
     print(f"✅ Q={Q}: 边界 {bound:.5f} 实测吻合")
 
 # 2) LP 直流增益必须为 1

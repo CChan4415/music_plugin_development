@@ -6,17 +6,20 @@
 # 安装: git config core.hooksPath .githooks
 # 跳过: git commit --no-verify
 
-git diff --cached --name-only --diff-filter=ACM | python3 -c '
+# ⚠️ 必须用 -z（NUL 分隔）：git 默认会"引用"非 ASCII 文件名
+#    （如 "00-Inbox/xxx \350\257\264..."），导致 pathlib 找不到文件
+#    → 所有中文名文件的检查会被静默跳过
+git diff --cached -z --name-only --diff-filter=ACM | python3 -c '
 import sys, pathlib
 
 ESCAPED = []
 PERSONAL = []
 TEXT_EXT = {".md", ".py", ".sh", ".cpp", ".c", ".h", ".hpp", ".json", ".yml", ".yaml"}
 
-for line in sys.stdin:
-    f = line.strip()
-    if not f:
-        continue
+data = sys.stdin.buffer.read().decode("utf-8", errors="replace")
+files = [f for f in data.split("\0") if f]
+
+for f in files:
     p = pathlib.Path(f)
     if not p.is_file():
         continue

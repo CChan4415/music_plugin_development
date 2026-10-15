@@ -189,8 +189,11 @@ def main():
     # 契约: 10-Sources/ 下的**原始资料**只增不改。
     # ⚠️ README.md 是目录说明，不是原始资料，修改它是合法的 —— 要排除。
     try:
+        # ⚠️ 加 -c core.quotePath=false：否则非 ASCII 文件名会被 git 转义成
+        #    "10-Sources/xxx \350\257\264..."，导致后续 git 命令找不到文件
         out = subprocess.run(
-            ['git', 'log', '--name-status', '--pretty=format:', '--', '10-Sources'],
+            ['git', '-c', 'core.quotePath=false', 'log', '--name-status',
+             '--pretty=format:', '--', '10-Sources'],
             cwd=VAULT, capture_output=True, text=True, timeout=10)
         modified = set()
         for line in out.stdout.splitlines():

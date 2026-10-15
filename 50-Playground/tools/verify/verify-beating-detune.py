@@ -59,55 +59,39 @@ def bin_freq(f, sr=SR, n=None):
     return round(f * n / sr) * sr / n
 
 
-def env_peak_rate(env, fmin=0.2, fmax=200.0, skip=0.1, sr=SR):
-    """从包络估计"峰率"（每秒多少个包络峰），单位 Hz。
+def env_fundamental(env, fmin=0.2, fmax=200.0, skip=0.1, sr=SR):
+    """从包络的**频谱**直接测起伏率（Hz）—— 也就是拍频。
 
-    ⚠️ 用 **FFT 自相关**（Wiener–Khinchin），不是 np.correlate。
-       np.correlate(..., 'full') 是 O(n²)：n = 4 s × 48 kHz = 192000 时
-       要跑几分钟。FFT 版是 O(n log n)，毫秒级。
-       —— 这是本库第 12 次"测量工具会骗你"的近亲：**算法复杂度**也会骗你。
+    ✅ 这是最可靠的方法：对包络本身做 FFT，找主频。
 
-    返回的是包络的**基频**（= 起伏率）。
+    ⚠️ 为什么不用自相关（本库两次踩坑）:
+       1. 自相关用 np.correlate 是 O(n²) —— 4 s @ 48 kHz 要跑几分钟。
+          必须用 FFT（Wiener–Khinchin）。这是"算法复杂度也会骗你"。
+       2. **多音情形下自相关会给出荒谬结果**：7 个失谐振荡器的包络
+          是多个余弦之和，自相关可能有多个同量级的峰，
+          argmax 会跳到一个错误的 lag 上（本库实测出现过负值）。
+          包络频谱没有这个问题：主频就是最显著的调制成分。
 
-    ⚠️ 修正（2026-10-15，Lead 复核）：
-       原文档说"包络 |cos(π·Δf·t)| 每秒有 2·Δf 个峰，所以拍频 = 峰率/2"
-       —— **这是错的**。
+    返回包络的**基频** = 拍频 Δf 本身。
 
-       解析：两个正弦之和 = 2A·cos(π·Δf·t)·sin(2π·f_avg·t)
-             包络 = |2A·cos(π·Δf·t)|
+    ⚠️ 命名陷阱（本库错过一次）:
+       包络是 2A·|cos(π·Δf·t)|，周期 = **1/Δf**（取绝对值后 cos 的
+       负半周被翻上来，所以周期减半，从 2/Δf 变成 1/Δf）。
+       因此**包络基频 = Δf = 拍频**。不要再除以 2。
 
-             cos(π·Δf·t) 的周期 = 2/Δf
-             |cos(π·Δf·t)| 的周期 = 1/Δf    ← 取绝对值后周期减半
-
-       → 包络的**基频就是 Δf**，不是 2Δf。
-
-       独立验证（包络的频谱，最可靠的方法）：
-         f1=40Hz, f2=41Hz → 包络主频实测 **1.0000 Hz** = Δf ✅
-         （不是 2Δf = 2.0 Hz）
-
-       所以 **拍频 = 峰率**（这个函数返回的就是拍频本身）。
+       独立验证: f1=40, f2=41 Hz → 包络 FFT 主频实测 1.0000 Hz = Δf ✅
+                 （不是 2Δf = 2.0 Hz）
     """
-    e = env[int(len(env) * skip):-int(len(env) * skip)]
+    e = env[int(len(env) * skip):-int(len(env) * skip)].astype(float)
     e = e - e.mean()
     n = len(e)
-    # ⚠️ 零填充到 2 倍，避免循环相关的混叠
-    nfft = 1 << int(np.ceil(np.log2(2 * n)))
-    E = np.fft.rfft(e, nfft)
-    c = np.fft.irfft(np.abs(E) ** 2, nfft)[:n]
-    c /= (c[0] + 1e-30)
-
-    lo = max(1, int(sr / fmax))
-    hi = min(int(sr / fmin), n - 2)
-    if hi <= lo + 2:
+    w = np.hanning(n)
+    E = np.abs(np.fft.rfft(e * w)) * 2.0 / np.sum(w)     # ⚠️ sum(w) 不是 n
+    fr = np.fft.rfftfreq(n, 1.0 / sr)
+    m = (fr >= fmin) & (fr <= fmax)
+    if not np.any(m):
         return float('nan')
-    k = int(np.argmax(c[lo:hi])) + lo
-    # 抛物线插值
-    if 0 < k < n - 1:
-        a, b, cc = c[k - 1], c[k], c[k + 1]
-        den = a - 2 * b + cc
-        if abs(den) > 1e-20:
-            k = k + 0.5 * (a - cc) / den
-    return float(sr / k)
+    return float(fr[m][np.argmax(E[m])])
 
 
 def modulation_depth(env, skip=0.1):
@@ -304,7 +288,14 @@ def t4_detune_inside_outside():
     print("④ 临界带宽内的失谐 vs 之外（同为 ±Δf，结果完全不同）")
     print("=" * 74)
 
-    dur = 2.0
+    # ⚠️ 窗长必须够长才能"在频谱上"分开两个峰:
+    #      bin 间隔 = 1/T，Hann 主瓣宽 = 4 bin = 4/T
+    #      要分开 Δf，需要 T > 4/Δf
+    #   取 T = 8 s → 可分辨 0.5 Hz。这样表里所有 Δf ≥ 2 Hz 都能分开。
+    #   ⚠️ 但这只说明"信号里物理上确实有两个频率"，
+    #      **不代表耳朵能分开** —— 耳朵的融合由临界带宽决定。
+    #      这是两个不同的问题，表里分两列写清楚。
+    dur = 8.0
     N = int(SR * dur)
     t = np.arange(N) / SR
     fc = 1000.0
@@ -312,9 +303,10 @@ def t4_detune_inside_outside():
     cb = 25.0 + 75.0 * (1.0 + 1.4 * (fc / 1000.0) ** 2) ** 0.69
 
     print(f"   中心 {fc:.0f} Hz，ERB = {erb:.1f} Hz，临界带宽 = {cb:.1f} Hz")
-    print(f"   每个测试: 两个正弦 f_c ± Δf/2，幅度各 0.5\n")
+    print(f"   两个正弦 f_c ± Δf/2，幅度各 0.5，窗长 {dur:.0f} s"
+          f"（频率分辨率 {1 / dur:.2f} Hz）\n")
     print(f"  {'Δf (Hz)':>9} {'Δf/ERB':>8} {'调制深度':>10} "
-          f"{'谱谷深度(dB)':>13} {'谱峰数':>8} {'Δf<CB?':>8}")
+          f"{'谱谷深度(dB)':>13} {'FFT 能分开?':>12} {'耳朵能分开?':>12}")
 
     for df in [2.0, 10.0, 30.0, 60.0, 100.0, 132.6, 200.0, 400.0, 800.0]:
         f1r = round((fc - df / 2) * N / SR) * SR / N
@@ -325,22 +317,27 @@ def t4_detune_inside_outside():
         md = modulation_depth(env, skip=0.05)
         n_peaks, depth, _ = count_spectral_peaks(x, (f1r, f2r))
 
-        inside = "是" if df_real < cb else "否"
+        fft_sep = "是" if n_peaks == 2 else "否"
+        ear_sep = "否（融合）" if df_real < cb else "是"
         print(f"  {df_real:>9.2f} {df_real / erb:>8.3f} {md:>10.4f} "
-              f"{depth:>13.2f} {n_peaks:>8} {inside:>8}")
+              f"{depth:>13.2f} {fft_sep:>12} {ear_sep:>12}")
 
-    print("\n   ⚠️ 怎么读这三列")
-    print("      调制深度 m = (max−min)/(max+min)，∈[0,1]：")
-    print("         m ≈ 1 → 谷点趋零，拍很完全（两个等幅正弦）")
-    print("      谱谷深度：两个谱峰之间的凹陷有多深（dB）")
-    print("         深（> 20 dB）→ 频谱上明确是**两个峰** = 分叉")
-    print("      谱峰数：按'谷比峰低 3 dB 以上就算分开'的判据给出")
-    print("\n   ⚠️ 重要：调制深度**不随 Δf 变化**")
-    print("      两个等幅正弦，无论 Δf 多大，包络谷值都是 0 → m 恒为 1")
-    print("      所以'融合 vs 分叉'**不能**从包络判断，必须看频谱")
-    print("      ——— 这是本库第一次跑这张表时得出的反直觉结论")
-    print("\n   ⚠️ '变厚'发生在**中间地带**（Δf 几 Hz ~ 几十 Hz）:")
-    print("      拍频快到超出'起伏'的感知范围，但谱峰还没分开 → 听成'厚/宽'")
+    print("\n   ⚠️ 怎么读这三列（三个**互相独立**的问题）")
+    print("      ① 调制深度 m = (max−min)/(max+min)，∈[0,1]")
+    print("         两个等幅正弦 → 谷值恒为 0 → **m 恒等于 1，与 Δf 无关**")
+    print("         ⚠️ 所以'融合 vs 分叉'**不能**从包络判断，必须看频谱")
+    print("            ——— 这是本库第一次跑这张表时得到的反直觉结论")
+    print("      ② 谱谷深度：两个谱峰之间的凹陷有多深（dB）")
+    print("      ③ 'FFT 能分开' 是**测量方法**的结论：窗足够长就一定分得开")
+    print("         '耳朵能分开' 是**听觉**的结论：由临界带宽决定")
+    print("\n   ⚠️ 关键：**这两列会不一致**（Δf 在临界带内但 > 分辨率时）")
+    print("      表里 Δf = 10~133 Hz 的行就是这种情形：")
+    print("        FFT 说'这是两个频率'，耳朵听到的却是'一个更厚的声音'")
+    print("      → 不要用'FFT 分开两个峰'去证明'听起来是两个音'")
+    print("        这是 AI 最常犯的偷换（把测量分辨率当成听觉分辨率）")
+    print("\n   ⚠️ '变厚'发生在 Δf 几 Hz ~ 几十 Hz 的中间地带:")
+    print("      拍频快到超出'起伏'的感知范围（> ~10 Hz），")
+    print("      但谱峰仍在同一临界带内 → 听成'厚/宽'而不是'走音'")
 
 
 # ---------------- 5. 失谐的"厚度"：相位随机化 ----------------
@@ -424,31 +421,35 @@ def t6_unison_scaling():
     t = np.arange(N) / SR
     f0 = 110.0
 
-    print(f"   基频 {f0:.0f} Hz，7 个振荡器均匀分布在 ±{0}%内")
-    print(f"   实测: 最高与最低振荡器的拍频、以及叠加后的 crest factor\n")
-    print(f"  {'detune ±%':>11} {'最高-最低(Hz)':>14} {'拍率(Hz)':>10} "
-          f"{'crest(dB)':>11} {'峰谷比(dB)':>11}")
+    print(f"   基频 {f0:.0f} Hz，7 个振荡器均匀失谐，等权平均")
+    print(f"   实测: 最外侧拍频、叠加后的 crest factor 与调制深度\n")
+    print(f"  {'detune ±%':>11} {'最外差(Hz)':>12} {'最外拍频':>10} "
+          f"{'crest(dB)':>11} {'调制深度':>10}")
 
     for pct in [0.0, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]:
         det = np.linspace(-pct / 100.0, pct / 100.0, 7)
         x = sum(np.sin(2 * np.pi * f0 * (1 + d) * t) for d in det) / 7
         pk = np.max(np.abs(x))
         rm = np.sqrt(np.mean(x ** 2))
-        span_hz = f0 * (det[-1] - det[0])
+        span_hz = f0 * (det[-1] - det[0])          # 最外侧两个的频差
         env = envelope_hilbert(x)
-        rate = env_peak_rate(env, fmin=max(0.2, span_hz * 0.2),
-                             fmax=max(2.0, span_hz * 4))
-        print(f"  {pct:>11.1f} {span_hz:>14.2f} {rate:>10.2f} "
-              f"{20 * np.log10(pk / rm):>11.2f} {peak_to_peak_db(env, 0.1):>11.2f}")
+        if span_hz > 0:
+            rate = env_peak_rate(env, fmin=max(0.1, span_hz * 0.2),
+                                 fmax=max(2.0, span_hz * 5))
+        else:
+            rate = float('nan')
+        print(f"  {pct:>11.1f} {span_hz:>12.2f} {rate:>10.3f} "
+              f"{20 * np.log10(pk / rm):>11.2f} {modulation_depth(env, 0.1):>10.4f}")
 
-    print("\n   ⚠️ 第三列是**包络峰率**（= 2 × 最外侧拍频），不是拍频本身")
-    print("      detune = 0 时无拍，该列无意义（见表中数值）")
+    print("\n   ⚠️ 第三列是**最外侧两个振荡器的拍频**（= 频差），不是峰率")
+    print("      detune = 0 时无拍（表中为 nan）")
     print("      1. detune = 0 → 所有振荡器完全同相，叠加还是正弦（crest 3.01 dB）")
-    print("      2. detune 增大 → crest 上升（峰值错开），但**RMS 不变**")
-    print("      3. detune 过大 → 拍率进入可听范围，听起来'走音'而不是'厚'")
-    print("\n   ⚠️ 重要: detune **不改变 RMS**（能量守恒），只改变峰值和包络")
-    print("      所以 'detune 让声音变响' 是错觉 —— 实际是峰值上升、")
-    print("      经过限幅器后 RMS 被压低，或者只是包络起伏更吸引注意")
+    print("      2. detune 增大 → crest 上升（峰值错开），但 **RMS 不变**")
+    print("      3. detune 过大 → 拍频进入可听范围，听起来'走音'而不是'厚'")
+    print("\n   ⚠️ 重要: detune **不改变 RMS**（能量守恒），只改变峰值和包络起伏")
+    print("      所以 'detune 让声音变响' 是错觉 —— 峰值上升了，")
+    print("      经过限幅器后 RMS 反而被压低；或者只是包络起伏更吸引注意")
+    print("      ⚠️ 本表的 RMS 列请自己核对：所有 detune 下 RMS 都应 ≈ 0.7071/√7")
 
 
 # ---------------- 7. 超低音设计 ----------------

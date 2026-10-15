@@ -344,6 +344,23 @@ print(f"✅ 平均峰间隔 {np.mean(np.diff(f[pk][:8])):.4f} Hz (理论 {SR/D:.
 
 ---
 
+## 数据来源
+
+> [!note] 本页所有「实测」数字的来源脚本
+> 全部在 `50-Playground/tools/verify/`，可独立复现：
+>
+> | 脚本 | 覆盖内容 | 关键输出 |
+> |---|---|---|
+> | `verify-comb-basic.py` | 前馈梳状的峰谷位置与增益 | 峰值 +5.3434 dB、谷值 −16.4782 dB（与解析偏差 < 0.0003 dB） |
+> | `verify-comb-damped.py` | 阻尼梳状的极点频率与 RT60 | 极点频率 ≠ k·fs/D；RT60 在 damp=0.9 时偏差达 +300% |
+> | `comb.cpp` | C++ 参考实现 | 直流增益 6.6667（与 `1/(1-g)` 一致） |
+>
+> **复现方式**：
+> ```bash
+> python3 50-Playground/tools/verify/verify-comb-basic.py
+> python3 50-Playground/tools/verify/verify-comb-damped.py
+> ```
+
 ## 相关
 
 - [[MOC - DSP]]

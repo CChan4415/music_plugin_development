@@ -216,7 +216,7 @@ bash 50-Playground/tools/check_crossplatform.sh Source/
 - [[跨平台开发 macOS 与 Windows]] — 跨平台检查
 - [[音频测量基础]] — 测量方法与陷阱
 - [[Bencina - Real-time audio programming 101]] — 实时规则的权威来源
-- [[2026-10-14 测量工具会骗你 —— 九次踩坑记录]]
+- [[2026-10-14 测量工具会骗你 —— 十次踩坑记录]]
 - [[MOC - AI Audio]]
 
 > [!note] 待补充

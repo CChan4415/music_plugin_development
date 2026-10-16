@@ -420,7 +420,7 @@ JUCE 的 `NormalisableRange` 支持 `skew` 和自定义映射函数——这是�
 - [[MOC - Plugin Formats]] — 窗口尺寸声明、参数系统、宿主交互的格式侧约束。
 - [[MOC - Frameworks & Toolchain]] — JUCE Component 体系的实现细节与构建。
 - [[MOC - DSP]] — 你要可视化的那些东西（滤波器、包络、频谱）的算法本体。
-- [[MOC - Psychoacoustics]] — 为什么对数刻度、为什么 LUFS、为什么表头要那样设计。
+- [[MOC - Music & Acoustics]] — 为什么对数刻度、为什么 LUFS、为什么表头要那样设计。
 - [[MOC - Craft & Release]] — 界面截图就是你的营销素材；第一印象决定转化率。
 - [[MOC - AI Audio]] — 生成式参数探索与智能预设。
 

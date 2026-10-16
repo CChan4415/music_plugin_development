@@ -392,7 +392,7 @@ private:
 - [[从音乐制作人到插件开发者]] — 你的知识盘点与缺口地图，本页是它的执行版
 - [[_meta/roadmap]] — 项目级路线图（本页是**学习**路线，那一页是**项目**路线）
 - [[MOC - Frameworks & Toolchain]] · [[MOC - DSP]] · [[MOC - Realtime Engineering]] · [[MOC - UI & UX]]
-- [[实时音频线程契约]] · [[参数平滑 parameter smoothing]] · [[Biquad 滤波器]] · [[denormal 数处理]] · [[音频缓冲区 buffer 与 block size]]
+- [[实时音频线程契约]] · [[参数平滑 parameter smoothing]] · [[Biquad 滤波器]] · [[denormal 数处理]] · [[音频缓冲区与 block size]]
 - [[插件格式对比]] · [[ADR-002 选择框架]] · [[AI 辅助 C++ 音频开发的真实效果]]
 
 > [!note] 待补充

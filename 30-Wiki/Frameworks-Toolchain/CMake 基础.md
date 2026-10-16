@@ -3,8 +3,8 @@ title: CMake 基础
 type: wiki
 domain: frameworks
 status: seed
-confidence: medium
-sources: []
+confidence: high
+sources: ["[[10-Sources/juce/JUCE 8.0.4 CMake API]]"]
 tags: [recipe, gotcha]
 created: 2026-10-15
 updated: 2026-10-15
@@ -218,18 +218,152 @@ $<$<CONFIG:Release>:-O3>
 
 ---
 
-## 六、本机能用什么（✅ 已实测）
+## 六、本机的工具链（✅ 2026-10-16 已实测）
 
-> [!important] 没有 cmake 时，手写 Makefile 也能开发
+> [!important] cmake 现在装上了，页面里的命令都能真跑
 
-本机实测的可用工具链：
+**安装方式**（实测有效，不污染系统）：
+
+```bash
+# pip 里有官方的 cmake 与 ninja wheel
+python3 -m venv .venv-tools
+.venv-tools/bin/pip install cmake ninja
+export PATH="$PWD/.venv-tools/bin:$PATH"
+
+cmake --version    # → cmake version 4.4.4
+ninja --version    # → 1.13.2
+```
+
+> [!tip] 为什么用 pip 装而不是 brew
+> | 方式 | 优点 | 缺点 |
+> |---|---|---|
+> | **pip** | ✅ 装进项目目录、可版本锁定、不污染系统 | 需要 Python |
+> | brew | 系统级、有 GUI 包 | 装到全局 |
+>
+> 对**只在某个项目里用**的场景，pip 更干净。
+
+**本机工具链实测状态**：
 
 ```
+✅ cmake 4.4.4        （pip 装，2026-10-16）
+✅ ninja 1.13.2       （pip 装）
 ✅ clang++ 21.0.0 (arm64)
 ✅ GNU Make 3.81
-✅ ar / ld / nm / strip（Xcode CLT）
-❌ cmake / ninja
+✅ ar / ld / nm / strip
 ```
+
+---
+
+## 六之二、⭐ 实测：CMake 4.x 的两个真实陷阱
+
+### 陷阱 1：CMake 4 **移除了**对 `VERSION < 3.5` 的支持
+
+> [!danger] 这是硬错误，不是警告
+> 很多老教程写 `cmake_minimum_required(VERSION 3.0)` 或 `2.8`。
+> **在 cmake 4.x 上直接失败**：
+>
+> ```
+> CMake Error at CMakeLists.txt:1 (cmake_minimum_required):
+>   Compatibility with CMake < 3.5 has been removed from CMake.
+> ```
+
+**实测各版本的接受情况**（cmake 4.4.4）：
+
+| `cmake_minimum_required` | 结果 |
+|---|---|
+| `VERSION 3.0` | ❌ **硬错误**（已被移除） |
+| `VERSION 3.5` | ⚠️ 通过，但有弃用警告 |
+| `VERSION 3.10` | ✅ 无警告 |
+| `VERSION 3.22` | ✅ 推荐（JUCE 8 要求的最低版本） |
+| `VERSION 3.30` | ✅ |
+
+**`VERSION 3.5` 的警告原文**：
+```
+CMake Warning (deprecated) at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of CMake.
+```
+
+> [!important] 结论
+> **写 `cmake_minimum_required(VERSION 3.22)`。**
+> 这是 JUCE 8 官方要求的版本，也不会触发任何弃用警告。
+
+### 陷阱 2：`CMAKE_CXX_EXTENSIONS` 的默认值是 **ON**
+
+> [!danger] 默认会用 `gnu++17` 而不是 `c++17`
+> **实测**（同一个源文件，只改这一个设置）：
+>
+> | 设置 | 实际编译命令 | `__STRICT_ANSI__` |
+> |---|---|---|
+> | 不设（默认） | *（gnu 扩展）* | **未定义** ⚠️ |
+> | `set(CMAKE_CXX_EXTENSIONS OFF)` | **`-std=c++17`** | **已定义** ✅ |
+>
+> **这就是为什么 Windows 编不过**：
+> GNU 扩展（如变长数组 VLA）在 GCC/Clang 上是扩展，**MSVC 不支持**。
+> macOS 上编得好好的代码，到 Windows 就失败。
+
+```cmake
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)      # ⭐ 必须显式关掉
+```
+
+### 陷阱 3：`ctest` 的失败被管道掩盖
+
+> [!danger] CI 里会静默通过
+> **实测**：
+> | 命令 | 测试失败时的退出码 |
+> |---|---|
+> | `ctest` | **8** ✅ 正确传播 |
+> | `ctest 2>&1 \| tail -5` | **0** ⚠️ **失败被掩盖** |
+>
+> 因为 `$?` 变成 `tail` 的退出码。
+>
+> **正确写法**：
+> ```bash
+> set -o pipefail                    # 让管道传播失败
+> ctest --output-on-failure 2>&1 | tail -20
+> # 或干脆不用管道
+> ctest --output-on-failure
+> ```
+
+---
+
+## 六之三、一个真实项目的完整流程（✅ 本机跑通）
+
+**实测记录**（按 [[CMake 插件项目结构]] 推荐的目录组织）：
+
+```
+myplugin/
+├── CMakeLists.txt
+├── Source/dsp/Biquad.h
+└── tests/test_dsp.cpp
+```
+
+```bash
+cmake -B build -G Ninja          # ✅ Configuring done (0.2s)
+cmake --build build              # ✅ [2/2] Linking CXX executable dsp_tests
+./build/dsp_tests                # ✅ 脉冲响应峰值 0.059527 / 直流增益 1.000003
+cd build && ctest --output-on-failure   # ✅ 1/1 Test #1: dsp ... Passed
+```
+
+> [!important] ⭐ 这验证了「DSP 解耦」的价值
+> `tests/test_dsp.cpp` **只依赖 `Source/dsp/`，不需要 JUCE**——
+> 所以配置只要 0.2 秒、编译只有 2 个目标。
+>
+> 如果测试链了 JUCE，配置和编译都会慢一个数量级。
+> 见 [[CMake 插件项目结构]]。
+
+**另外一个实测**：改 `CMakeLists.txt` 后**不需要手动重配置**——
+CMake 会自动检测并重跑（实测改 `target_compile_definitions` 后直接
+`cmake --build` 就生效了）。
+
+---
+
+## 六之四、没有 cmake 时的退路
+
+> [!tip] 学 DSP 阶段用 Makefile 也够
+> CMake 的价值在**跨平台 + JUCE + CI**。
+> 只写小实验时 `clang++` 直接编译或简单 Makefile 完全够。
 
 **一个可用的 Makefile**（✅ 已实测构建成功）：
 
@@ -252,21 +386,6 @@ test: $(TARGET)
 clean:
 	rm -f $(TARGET)
 ```
-
-实测输出：
-```
-$ make
-clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic plugin.cpp -o plugin_test
-
-$ make test
-  平均输出 0.449387
-```
-
-> [!tip] 学 DSP 阶段用 Makefile 就够
-> CMake 的价值在**跨平台 + JUCE + CI**。
-> 你**现在**（学 DSP、写小实验）用 `clang++` 直接编译或简单 Makefile 完全够。
->
-> **等要做真插件时再上 CMake。**
 
 ---
 
@@ -308,6 +427,18 @@ $ make test
 ---
 
 ## 九、怎么验证
+
+> [!important] ⭐ 本库有一键验证脚本
+> ```bash
+> bash 50-Playground/tools/cmake/verify-cmake-claims.sh
+> ```
+> 它自动定位 cmake（含本库 `.venv-tools/` 里的），实测输出：
+> ```
+> ① cmake_minimum_required: 3.0 ❌ / 3.5 ⚠️ / 3.10+ ✅
+> ② CMAKE_CXX_EXTENSIONS: default → -std=gnu++17 / off → -std=c++17
+> ③ ctest: 直接→8 / ctest|tail→0（掩盖）/ pipefail→8（正确）
+> ```
+
 
 **如果你装了 cmake**：
 

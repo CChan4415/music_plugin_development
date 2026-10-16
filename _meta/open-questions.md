@@ -211,7 +211,7 @@ DSP 公式和 API 细节很适合做成 Anki 卡片。要不要加 `#flashcard` 
 |---|---|---|---|
 | C1 | [[MOC - DSP]] | `[[自适应滤波 LMS 与 RLS]]` — LMS 只是自适应算法之一，是否该拆成两条 | 查任意 DSP 教材的目录结构 |
 | C2 | [[MOC - DSP]] | `[[滤波器设计]]` 把 Linkwitz-Riley 与 Butterworth/Chebyshev 并列，但 L-R 严格说是 crossover 专用 | 查分频器设计资料 |
-| C3 | [[MOC - DSP]] | `[[多速率处理]]` 与 `[[采样率转换 resampling]]` 的边界是人为划的，可能重叠 | 实际写这两页时再决定合并还是拆分 |
+| C3 | [[MOC - DSP]] | `[[多速率处理 multirate]]` 与 `[[采样率转换 resampling]]` 的边界是人为划的，可能重叠 | 实际写这两页时再决定合并还是拆分 |
 | C4 | [[MOC - Realtime Engineering]] | `[[双击 A-B 对比]]` 这个叫法是否通用（业界更常说 A/B compare） | 看主流插件的文档用词 |
 | C5 | [[MOC - DSP]] | `[[虚拟模拟滤波器]]` 中 ZDF 的表述（"解反馈方程而不是直接加单位延迟"）措辞是否精确 | 查 ZDF / TPT 原始推导 |
 | C6 | [[MOC - DSP]] | `[[相位声码器]]` 的"金属味"成因表述 | 听感现象公认，成因需查文献 |

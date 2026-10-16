@@ -222,8 +222,19 @@ def main():
                        if l.startswith(('+', '-')) and not l.startswith(('+++', '---'))]
             only_links = bool(changed) and all(
                 l.startswith('- [[') or l.startswith('+ [[') for l in changed)
+            # 索引/说明页（type: meta）是登记目录用的，不是原始资料内容。
+            # 新增子目录时必须更新它 —— 这是合法的，不算"改了来源"。
+            is_index = False
+            if f.endswith('说明.md') or f.endswith('README.md'):
+                try:
+                    txt = (VAULT / f).read_text(encoding='utf-8')
+                    is_index = 'type: meta' in txt
+                except Exception:
+                    pass
             if only_links:
                 print(f"  ℹ️  {f}  仅链接行变更（重命名的连带修改，合法）")
+            elif is_index:
+                print(f"  ℹ️  {f}  索引页（type: meta）—— 登记新目录，合法")
             elif changed:
                 problems['Sources 被修改'].append(
                     f"{f}  内容被修改 —— 契约要求 10-Sources/ 只增不改")

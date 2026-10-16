@@ -3,8 +3,8 @@ title: JUCE 的架构与模块划分
 type: wiki
 domain: frameworks
 status: seed
-confidence: medium
-sources: []
+confidence: high
+sources: ["[[10-Sources/juce/JUCE 8.0.4 Module Format]]", "[[10-Sources/juce/JUCE 8.0.4 CMake API]]"]
 tags: [gotcha]
 created: 2026-10-16
 updated: 2026-10-16
@@ -12,9 +12,14 @@ updated: 2026-10-16
 
 # JUCE 的架构与模块划分
 
-> [!warning] ⚠️ 本页置信度：medium
-> 本机**没有安装 JUCE**。模块名与依赖关系来自文档与社区实践，
-> **需对照你的 JUCE 版本核实**。代码片段用本库 JUCE stub 做过语法检查。
+> [!note] ✅ 已用官方文档核对（2026-10-16）
+> - **模块依赖**：`10-Sources/juce/JUCE 8.0.4 Module Format.md` 确认
+>   "Each module may have dependencies on other modules"，
+>   且 `dependencies` 字段可**自动解析**（原文：auto-resolve dependencies）
+> - **CMake 写法**：`10-Sources/juce/JUCE 8.0.4 CMake API.md`（867 行官方文档）
+> - **代码语法**：本库 JUCE stub 做过 `-fsyntax-only`（见 [[juce_stub 说明]]）
+>
+> ⚠️ **仍未实测**：本机缺 JUCE 的 `modules/` 源码，未真正编译过插件。
 
 > [!important] 一句话
 > **JUCE 是"按功能拆成模块"的**——
@@ -42,11 +47,15 @@ updated: 2026-10-16
 └─────────────────────────────────────────┘
 ```
 
-> [!note] 依赖是**自下而上**的
-> `juce_audio_utils` 依赖 `juce_audio_processors`，
-> 后者依赖 `juce_audio_basics`，最终都依赖 `juce_core`。
+> [!note] 依赖是**自下而上**的，且**自动解析**
+> JUCE 官方 CMake API 文档原文：
+> *"Inter-module dependencies are resolved automatically, so `juce_core`,
+> `juce_events` and so on will also be linked automatically."*
 >
-> **你只需要链接最上层那个**，CMake 会自动带上依赖。
+> 每个模块在自己的 `BEGIN_JUCE_MODULE_DECLARATION` 块里用
+> `dependencies:` 字段声明依赖（官方 Module Format 文档确认）。
+>
+> **你只需要链接最上层那个。**
 
 ---
 

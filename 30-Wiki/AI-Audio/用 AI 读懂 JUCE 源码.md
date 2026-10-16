@@ -3,8 +3,8 @@ title: 用 AI 读懂 JUCE 源码
 type: wiki
 domain: ai-audio
 status: seed
-confidence: medium
-sources: []
+confidence: high
+sources: ["[[10-Sources/juce/JUCE 8.0.4 官方插件编辑器示例.cpp]]", "[[10-Sources/juce/JUCE 8.0.4 官方 Slider+Attachment 示例.h]]"]
 tags: [recipe, gotcha]
 created: 2026-10-16
 updated: 2026-10-16
@@ -12,12 +12,12 @@ updated: 2026-10-16
 
 # 用 AI 读懂 JUCE 源码
 
-> [!warning] ⚠️ 本页置信度：medium
-> 本机**没有安装 JUCE**（只有本库自建的 stub 头文件）。
-> 所以本页**不给具体的 JUCE 源码行号或 API 细节**——
-> 那些必须对着你锁定版本的源码看。
+> [!note] ✅ 本页的方法已用真实 JUCE 源码验证（2026-10-16）
+> 本机拿到了 JUCE 8.0.4 的 `examples/` 与 `docs/`（⚠️ `modules/` 下载被截断）。
 >
-> **本页给的是"怎么问、怎么验证"的方法**，这部分是可操作的。
+> **本页讲的"问具体问题 + 回源码核对"流程，在下面第 3 节有真实的执行记录。**
+>
+> ⚠️ 仍未实测：`modules/` 里的实现源码（那是"读源码"的最终对象）。
 
 > [!important] 一句话
 > **AI 能帮你快速定位源码、解释意图、给出调用链。**
@@ -116,6 +116,77 @@ public:
 > **绝不能在音频线程调用。**
 >
 > 而且它接收的是**非 const 引用**（输出参数）——这个签名本身就是提示。
+
+---
+
+## 三之二、⭐ 真实执行记录（本库 2026-10-16）
+
+用本页的方法去查 JUCE 8.0.4 的真实源码，**结果抓到了两个真实的坑**：
+
+### 案例 1：`getStateInformation` 会分配吗？
+
+**问法**：在音频线程调用这个方法安全吗？
+
+**回源码核对**（`examples/CMake/AudioPlugin/PluginProcessor.cpp`）：
+```cpp
+void AudioPluginAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+    // You should use this method to store your parameters in the memory block.
+    juce::ignoreUnused (destData);      // ← 官方模板是空的
+}
+```
+
+**发现**：
+1. 签名接收 `MemoryBlock&`（**非 const 引用**）→ 输出参数 → 暗示会写入/扩容
+2. **官方模板根本没实现**——只留注释
+3. 真实的 `AudioPluginDemo.h` 用的是 `copyXmlToBinary`（**会分配**）
+
+> [!important] 结论
+> **不能在音频线程调用。** 而且"官方模板是空的"这件事
+> 意味着 **AI 照着它生成空函数是"合理"的**——
+> 你必须自己补上。见 [[状态保存与恢复]]。
+
+### 案例 2：`SliderAttachment` 到底怎么构造？
+
+**问法**：这个类的构造签名是什么？在哪构造？
+
+**回源码核对**（`examples/Plugins/AudioPluginDemo.h`）：
+```cpp
+// 成员声明
+AudioProcessorValueTreeState::SliderAttachment gainAttachment, delayAttachment;
+
+// ⭐ 在初始化列表里构造，不是构造函数体里
+JuceDemoPluginAudioProcessorEditor (JuceDemoPluginAudioProcessor& owner)
+    : AudioProcessorEditor (owner),
+      gainAttachment  (owner.state, "gain",  gainSlider),
+      delayAttachment (owner.state, "delay", delaySlider)
+```
+
+**发现**：
+- 签名是 **`(state, parameterID, slider)`** 三参数
+- **必须在初始化列表里**（因为 attachment 要绑定已存在的对象）
+
+> [!tip] 这正是"必须回源码"的原因
+> 文档只会说"用 SliderAttachment 绑定参数"，
+> **不会告诉你它在哪构造、参数顺序是什么。**
+> 而顺序错了会编译失败或绑定到错误的参数。
+
+### 方法论上的收获
+
+| 做法 | 效果 |
+|---|---|
+| 问"这个函数在音频线程安全吗" | ✅ 挖出分配/锁 |
+| 看**签名**（`MemoryBlock&` 而非 `const&`） | ✅ 能推断意图 |
+| 找**两个**例子对照（模板 vs 真实插件） | ⭐ **关键**：模板常是空的 |
+| 用 `grep -n` 定位行号 | ✅ 可复现 |
+
+> [!danger] 最重要的一条：**别只看模板，要看真实示例**
+> JUCE 的 `examples/CMake/AudioPlugin/` 是**最小骨架**
+> （大量 `ignoreUnused` 和 TODO 注释）。
+> 真实用法在 `examples/Plugins/*.h`（如 `AudioPluginDemo.h`）。
+>
+> **AI 学的是"到处都有的骨架"，不是"某个具体插件的真实实现"。**
+
 
 ---
 

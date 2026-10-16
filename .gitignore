@@ -8,6 +8,18 @@
 .DS_Store
 
 # 构建产物（Playground 里的实验代码）
+# 任意位置的 CMake 构建产物（⭐ 实测：不加这条会误提交整个 build/）
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+build.ninja
+.ninja_deps
+.ninja_log
+compile_commands.json
+Testing/
+install_manifest.txt
+
 50-Playground/**/build/
 50-Playground/**/cmake-build-*/
 50-Playground/**/*.o

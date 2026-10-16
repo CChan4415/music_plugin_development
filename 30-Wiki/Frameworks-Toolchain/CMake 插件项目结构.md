@@ -3,8 +3,8 @@ title: CMake 插件项目结构
 type: wiki
 domain: frameworks
 status: seed
-confidence: medium
-sources: []
+confidence: high
+sources: ["[[10-Sources/juce/JUCE 8.0.4 官方插件示例 CMakeLists.txt]]", "[[10-Sources/juce/JUCE 8.0.4 CMake API]]"]
 tags: [recipe]
 created: 2026-10-16
 updated: 2026-10-16
@@ -12,10 +12,13 @@ updated: 2026-10-16
 
 # CMake 插件项目结构
 
-> [!warning] ⚠️ 本页置信度：medium
-> 本机**没有 cmake 也没有 JUCE**。目录结构是通用工程实践，
-> **具体文件内容需你在真实项目里验证**。
-> CMake 片段做过括号/命令名结构校验。
+> [!note] ✅ 本页结构已用真实 cmake 跑通（2026-10-16）
+> - **工具**：cmake 4.4.4 + ninja 1.13.2（pip 装进本库 `.venv-tools/`）
+> - **实测**：按本页推荐的目录结构建了项目，配置 0.2 s → 构建 → `ctest` 1/1 Passed
+> - **官方参照**：JUCE 8.0.4 的 `examples/CMake/AudioPlugin/`（已归档到 `10-Sources/juce/`）
+>
+> ⚠️ **仍未实测**：`juce_add_plugin` 本身（本机缺 JUCE `modules/` 源码）。
+> 但「DSP 解耦 + 独立测试」这部分**完全不需要 JUCE**，已验证。
 
 > [!important] 一句话
 > **插件项目 = 一个仓库、一份 CMakeLists、一个 Source/ 目录。**
@@ -54,9 +57,19 @@ my-plugin/
 ## 二、`.gitignore`（必须有）
 
 ```gitignore
-# 构建产物
+# ⭐ 构建产物（任意位置，不只是子目录）
 build/
 cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+build.ninja
+.ninja_deps
+.ninja_log
+compile_commands.json
+Testing/
+install_manifest.txt
+
+# 编译产物
 *.o
 *.a
 *.dylib
@@ -85,6 +98,20 @@ JUCE/
 > - 仓库迅速膨胀（几百 MB）
 > - 每次改配置都产生大量无意义 diff
 > - 换机器时旧产物干扰新构建
+
+> [!warning] ⭐ 实测发现：**光写 `build/` 可能不够**
+> 本库实测时踩到：`.gitignore` 里只有 `50-Playground/**/build/` 这种
+> **限定路径**的规则 → 根目录的 `build/` **不会被忽略**。
+>
+> ```bash
+> # 验证方法（本库实测有效）
+> git check-ignore -v build/ CMakeCache.txt build.ninja
+> # 每个都应该输出匹配到的规则；没有输出 = 没被忽略
+> ```
+>
+> **建议写不限定路径的 `build/`**，同时列出 CMake 的散落文件
+> （`CMakeCache.txt`、`build.ninja`、`CMakeFiles/`、`Testing/`）——
+> 因为 **in-source build** 会把这些直接生成在源码目录里。
 
 > [!note] `*.vst3/` 末尾的斜杠
 > macOS 上 `.vst3` 是**目录**，加斜杠才能正确忽略。
@@ -166,6 +193,23 @@ clang++ -std=c++17 -O1 -g -fsanitize=address,undefined \
 ```
 > 本库的 `50-Playground/ref-build/` 就是这个模式的最小示例（Makefile 已实测）。
 
+**⭐ 本机实测结果**（cmake 4.4.4 + ninja，2026-10-16）：
+
+```
+$ cmake -B build -G Ninja
+-- Configuring done (0.2s)          ← ⚡ 只要 0.2 秒
+$ cmake --build build
+[2/2] Linking CXX executable dsp_tests    ← 只有 2 个编译目标
+$ ./build/dsp_tests
+  ✅ 测试通过
+$ cd build && ctest --output-on-failure
+1/1 Test #1: dsp .......................... Passed
+```
+
+> [!important] 对比：如果测试链了 JUCE
+> 配置要**几十秒**（JUCE 有几千个文件），编译目标也会多一个数量级。
+> **这就是"把 DSP 拆出来"的实际收益。**
+
 ---
 
 ## 五、跨平台注意
@@ -238,8 +282,13 @@ endif()
 **本机可做**：
 
 ```bash
-# ① 检查 .gitignore 是否覆盖关键项
-grep -E "^build/|^\*\.vst3|^\*\.component" .gitignore || echo "⚠️ 缺关键忽略项"
+# ① 检查 .gitignore 是否真的生效（⭐ 比 grep 可靠）
+git init -q /tmp/gi-test && cd /tmp/gi-test
+mkdir -p build && touch build/x CMakeCache.txt
+cp <你的>/.gitignore . && git add -A
+git check-ignore -v build/ CMakeCache.txt    # 应有输出
+# 或用本库的一键脚本
+bash 50-Playground/tools/cmake/verify-cmake-claims.sh
 
 # ② 跨平台检查（大小写、类型宽度、平台 API）
 bash 50-Playground/tools/check_crossplatform.sh Source/

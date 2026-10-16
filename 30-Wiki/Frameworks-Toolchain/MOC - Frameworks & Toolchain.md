@@ -30,6 +30,9 @@ updated: 2026-10-14
 
 | 页面 | 一句话 |
 |---|---|
+| [[CMake 插件项目结构]] | 目录结构；DSP 解耦可独立测试 |
+| [[JUCE 的 CMake API]] | juce_add_plugin 参数；四字符代码 |
+| [[JUCE 的架构与模块划分]] | 模块依赖；AudioProcessor 生命周期 |
 | [[CMake 基础]] | ⚠️ 部分未实测（本机无 cmake） |
 | [[跨平台开发 macOS 与 Windows]] | 平台差异 |
 

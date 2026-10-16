@@ -20,7 +20,19 @@ namespace juce
     using int64 = long long;
     using uint32 = unsigned int;
 
-    template <typename T> struct Rect { T x, y, w, h; };
+    template <typename T> struct Rect
+    {
+        T x = 0, y = 0, w = 0, h = 0;
+        Rect() = default;
+        Rect (T x_, T y_, T w_, T h_) : x(x_), y(y_), w(w_), h(h_) {}
+        Rect reduced (T) const { return *this; }
+        Rect removeFromTop (T) { return *this; }
+        Rect removeFromBottom (T) { return *this; }
+        Rect removeFromLeft (T) { return *this; }
+        Rect removeFromRight (T) { return *this; }
+        T getWidth()  const { return w; }
+        T getHeight() const { return h; }
+    };
 
     // ---------------- 断言 / 调试 ----------------
     inline void jassert_impl (bool) {}
@@ -303,6 +315,95 @@ namespace juce
         operator bool() const { return false; }
     };
 
+    // ---------------- UI（最小集，供 Wiki 代码语法检查）----------------
+    struct Graphics
+    {
+        void fillAll() {}
+        void setColour (int, int) {}
+        void drawText (const String&, int, int, int, int) {}
+    };
+    struct Colour { Colour() = default; Colour (unsigned int) {} };
+
+    class Component
+    {
+    public:
+        Component() = default;
+        virtual ~Component() = default;
+        virtual void paint (Graphics&) {}
+        virtual void resized() {}
+        virtual void mouseDown (const void*) {}
+        void setSize (int, int) {}
+        void addAndMakeVisible (Component*) {}
+        void addAndMakeVisible (Component&) {}
+        int  getWidth()  const { return 0; }
+        int  getHeight() const { return 0; }
+        Rect<int> getLocalBounds() const { return {0,0,0,0}; }
+        void setBounds (int, int, int, int) {}
+        void setBounds (const Rect<int>&) {}          // 真实 JUCE 有 Rect 重载
+    };
+
+    class Slider : public Component
+    {
+    public:
+        enum Style { LinearHorizontal, LinearVertical, Rotary, RotaryHorizontalVerticalDrag };
+        enum TextEntryBoxPosition { NoTextBox, TextBoxLeft, TextBoxRight, TextBoxAbove, TextBoxBelow };
+        Slider() = default;
+        Slider (Style) {}
+        void setRange (double, double, double = 0.0) {}
+        void setValue (double, int = 0) {}
+        double getValue() const { return 0.0; }
+        void setSliderStyle (Style) {}
+        void setTextBoxStyle (TextEntryBoxPosition, bool, int, int) {}
+        void setSkewFactorFromMidPoint (double) {}
+        void setTextValueSuffix (const String&) {}
+        void onValueChange (std::function<void()>) {}
+        void setNumDecimalPlacesToDisplay (int) {}
+    };
+
+    class Label : public Component
+    {
+    public:
+        Label() = default;
+        Label (const String&, const String&) {}
+        void setText (const String&, int = 0) {}
+        void setJustificationType (int) {}
+        void attachToComponent (Component*, bool) {}
+    };
+
+    class Button : public Component
+    {
+    public:
+        Button() = default;
+        void setButtonText (const String&) {}
+        void onClick (std::function<void()>) {}
+    };
+
+    class TextButton : public Button
+    {
+    public:
+        TextButton() = default;
+        TextButton (const String&) {}
+    };
+
+    class ComboBox : public Component
+    {
+    public:
+        ComboBox() = default;
+        void addItem (const String&, int) {}
+        void setSelectedId (int, int = 0) {}
+        int  getSelectedId() const { return 0; }
+        void onChange (std::function<void()>) {}
+    };
+
+    class Timer
+    {
+    public:
+        virtual ~Timer() = default;
+        virtual void timerCallback() {}
+        void startTimerHz (int) {}
+        void stopTimer() {}
+    };
+
     class AudioProcessorValueTreeState;
 
     // ---------------- 声道集合 ----------------
@@ -328,8 +429,15 @@ namespace juce
         void setCurrentAndTargetValue (T) {}
     };
 
+    class AudioProcessor;      // 前置声明（AudioProcessorEditor 的构造函数要用）
+
     // ⚠️ 真实 JUCE 里 AudioProcessorEditor 是 juce 命名空间级的类
-    class AudioProcessorEditor {};
+    class AudioProcessorEditor : public Component
+    {
+    public:
+        AudioProcessorEditor() = default;
+        explicit AudioProcessorEditor (AudioProcessor*) {}
+    };
 
     class AudioProcessor
     {

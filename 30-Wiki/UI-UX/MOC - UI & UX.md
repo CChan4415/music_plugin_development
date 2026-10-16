@@ -26,7 +26,14 @@ DSP 算法你可以学，CMake 你可以查文档，但"什么样的界面让音
 
 ---
 
-## 依赖与决策顺序
+## ⭐ 已完成
+
+| 页面 | 一句话 |
+|---|---|
+| [[JUCE Component 体系]] | paint/resized；坐标相对父组件 |
+| [[JUCE 的 Slider 与旋钮]] | ⭐ 频率必须用对数刻度 |
+
+依赖与决策顺序
 
 ```mermaid
 flowchart TD

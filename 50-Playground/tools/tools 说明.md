@@ -33,6 +33,7 @@ updated: 2026-10-15
 |---|---|
 | `cpp/` | [[C++ 工具]] — 音频线程分配检测器、DSP 微基准 |
 | `sanitizer/` | [[sanitizer 工具说明]] — ASan/UBSan 演示（实测抓到越界与五类 UB） |
+| `juce_stub/` | [[juce_stub 说明]] — 无 JUCE 环境下的语法检查 |
 | `verify/` | 验证脚本（TPT SVF、梳状、FIR、IIR、极零点、振荡器混叠） |
 
 ## 相关目录

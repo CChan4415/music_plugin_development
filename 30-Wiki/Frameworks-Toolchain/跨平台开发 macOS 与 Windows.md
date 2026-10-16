@@ -295,6 +295,27 @@ bash 50-Playground/tools/check_crossplatform.sh Source/
 
 ---
 
+## AI 会怎么写错
+
+| # | AI 常犯 | 后果 | 怎么查 |
+|---|---|---|---|
+| 1 | **头文件大小写不一致** | macOS 过、Windows 挂 | 用本库的检查脚本 |
+| 2 | **`long` 假设是 4 字节** | Windows 上是 4，Linux/mac 是 8 | 用 `int32_t` |
+| 3 | **路径用 `/` 硬编码** | Windows 失败 | 用框架的路径 API |
+| 4 | **`#pragma once` 之外用 `__attribute__`** | MSVC 不认 | 用宏封装 |
+| 5 | **忘了 Windows 运行时库设置** | 运行时冲突 | 见 [[CMake 基础]] |
+| 6 | **用 POSIX API** | Windows 没有 | 用标准库/框架 |
+| 7 | **假设 `char` 是有符号** | ARM 上是无符号 | 用 `int8_t` |
+| 8 | **只在 macOS 测** | 发布时才发现 | CI 双平台 |
+
+> [!danger] 第 1 条是"本地永远发现不了"的经典
+> macOS 文件系统**不区分大小写** → `#include "biquad.h"` 能找到 `Biquad.h`
+> Windows **区分** → 编译失败。
+>
+> **本库有工具**：`bash 50-Playground/tools/check_crossplatform.sh Source/`
+
+---
+
 ## 相关
 
 - [[MOC - Frameworks & Toolchain]]

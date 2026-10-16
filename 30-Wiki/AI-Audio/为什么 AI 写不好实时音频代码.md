@@ -184,6 +184,36 @@ DSP 核心属于后者——因为你需要**建立直觉**，否则无法调试
 
 ---
 
+## 怎么验证
+
+**四个必做检查**（验证 AI 生成的代码是否踩了这些坑）：
+
+| # | 检查 | 命令 |
+|---|---|---|
+| 1 | **音频线程无分配** | grep `push_back`/`new`/`resize` |
+| 2 | **无锁** | grep `mutex`/`lock` |
+| 3 | **参数已钳制** | grep 参数赋值处 |
+| 4 | **denormal 防护** | grep `ScopedNoDenormals` |
+
+```bash
+# ① 检查音频线程里的可疑调用
+grep -n "push_back\|resize\|new \|malloc\|mutex\|printf\|std::string" \
+    Source/PluginProcessor.cpp
+
+# ② 用 sanitizer + 极端参数
+clang++ -std=c++17 -O1 -g -fsanitize=address,undefined \
+    -fno-sanitize-recover=all test.cpp -o t && ./t
+
+# ③ 重载 operator new 检测音频线程分配（本库工具）
+clang++ -std=c++17 -O1 -g audio_thread_alloc_detector.cpp mytest.cpp -o t && ./t
+```
+
+> [!important] 本库的做法
+> **不依赖"AI 说它对"，而是用机械检查。**
+> 见 [[AI 辅助 C++ 音频开发的真实效果]] 的 8 个实测案例。
+
+---
+
 ## 相关
 
 - [[AI 生成代码的审查清单]] — 这一页的"怎么办"

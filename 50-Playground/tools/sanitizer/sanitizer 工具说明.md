@@ -51,3 +51,39 @@ ubsan_demo.cpp:34:13: runtime error: store to misaligned address ... requires 8 
 ```
 
 **全部 5 类都被抓到。** 详见 [[AddressSanitizer]] 与 [[UndefinedBehaviorSanitizer]]。
+
+## tsan_demo.cpp — TSan 能抓什么（实测）
+
+```bash
+clang++ -std=c++17 -O1 -fsanitize=thread tsan_demo.cpp -o tsan_demo
+./tsan_demo 0    # 非原子共享变量
+./tsan_demo 1    # relaxed 原子
+./tsan_demo 2    # relaxed 索引 + 非原子 payload
+```
+
+实测结果（Apple Silicon arm64, clang 21）：
+
+| mode | 场景 | TSan 报告 |
+|---|---|---|
+| 0 | 非原子共享变量 | **2 条 data race** ✅ |
+| 1 | relaxed 原子 | **0 条**（正确：原子不是 race） |
+| 2 | relaxed 索引 + 非原子 payload | **0 条** ⚠️ |
+
+## tear_detect.cpp — 撕裂检测（TSan 抓不到的那个）
+
+```bash
+clang++ -std=c++17 -O2 tear_detect.cpp -o tear && ./tear
+```
+
+实测（200 万次，3 次运行）：
+
+```
+撕裂 2708 / 2000000
+撕裂 4996 / 2000000
+撕裂 4672 / 2000000
+```
+
+⭐ **TSan 报 0 条 race，但数据真的撕裂几千次。**
+这是唯一能自动发现"内存序不足"的实用手段。
+
+详见 [[ThreadSanitizer 与内存序]]。

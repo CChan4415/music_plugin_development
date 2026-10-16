@@ -3,8 +3,8 @@ title: JUCE 的 Slider 与旋钮
 type: wiki
 domain: ui
 status: seed
-confidence: medium
-sources: []
+confidence: high
+sources: ["[[10-Sources/juce/JUCE 8.0.4 官方 Slider+Attachment 示例.h]]", "[[10-Sources/juce/JUCE 8.0.4 CMake API]]"]
 tags: [recipe, gotcha]
 created: 2026-10-16
 updated: 2026-10-16
@@ -12,9 +12,12 @@ updated: 2026-10-16
 
 # JUCE 的 Slider 与旋钮
 
-> [!warning] ⚠️ 本页置信度：medium
-> 本机**没有 JUCE**。代码用本库 JUCE stub 做过语法检查（**通过** ✅），
-> 但**行为未验证**。API 细节需对照你的 JUCE 版本。
+> [!note] ✅ 已用 JUCE 8.0.4 官方示例核对（2026-10-16）
+> - **权威来源**：`examples/Plugins/AudioPluginDemo.h`（含真实的
+>   `Slider::Rotary` + `SliderAttachment` 用法）
+> - **代码语法**：本库 JUCE stub 做过 `-fsyntax-only`，5/5 片段通过
+>
+> ⚠️ **仍未实测**：本机缺 JUCE `modules/` 源码，**未真正编译/运行过**。
 
 > [!important] 一句话
 > **`Slider` 是插件 UI 里最重要的控件**——
@@ -159,16 +162,32 @@ private:
 > 把 UI 和参数连起来。
 
 ```cpp
-// ⚠️ 伪代码：ParameterAttachment 的准确构造方式需对照你的 JUCE 版本
-// 这里只示意"双向绑定 + 抑制通知"的模式，**不能直接编译**
-juce::ParameterAttachment attachment {
-    *myParameter,
-    [this] (float v) { slider.setValue (v, juce::dontSendNotification); }
-};
-slider.onValueChange = [this] {
-    attachment.setValueAsCompleteGesture (slider.getValue());
-};
+// ⭐ 官方真实用法（JUCE 8.0.4 examples/Plugins/AudioPluginDemo.h）
+// 成员声明：
+Slider gainSlider, delaySlider;
+AudioProcessorValueTreeState::SliderAttachment gainAttachment, delayAttachment;
+
+// 构造函数初始化列表里绑定（注意顺序：先 state/slider 后 attachment）：
+JuceDemoPluginAudioProcessorEditor (JuceDemoPluginAudioProcessor& owner)
+    : AudioProcessorEditor (owner),
+      gainAttachment  (owner.state, "gain",  gainSlider),
+      delayAttachment (owner.state, "delay", delaySlider)
+{
+    addAndMakeVisible (gainSlider);
+    gainSlider.setSliderStyle (Slider::Rotary);      // ⭐ 枚举值不带类名前缀
+    addAndMakeVisible (delaySlider);
+    delaySlider.setSliderStyle (Slider::Rotary);
+}
 ```
+
+> [!important] 这段是**官方示例原文**，不是我的推测
+> 三个关键点都能从这段确认：
+> 1. **`SliderAttachment` 在初始化列表里构造**（不是构造函数体里）
+> 2. 签名是 `(state, parameterID, slider)` —— 三参数
+> 3. `setSliderStyle(Slider::Rotary)` —— 在类内部时可省略 `juce::` 前缀
+>
+> ⚠️ 注意：`Slider::Rotary` 与 `Slider::SliderStyle::Rotary` 两种写法官方都用过
+> （`SamplerPluginDemo.h` 里就是 `Slider::SliderStyle::IncDecButtons`）。
 
 > [!danger] 两个必须注意的点
 > | 点 | 说明 |

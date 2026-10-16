@@ -3,8 +3,8 @@ title: JUCE Component 体系
 type: wiki
 domain: ui
 status: seed
-confidence: medium
-sources: []
+confidence: high
+sources: ["[[10-Sources/juce/JUCE 8.0.4 官方插件编辑器示例.cpp]]", "[[10-Sources/juce/JUCE 8.0.4 CMake API]]"]
 tags: [recipe, gotcha]
 created: 2026-10-16
 updated: 2026-10-16
@@ -12,9 +12,11 @@ updated: 2026-10-16
 
 # JUCE Component 体系
 
-> [!warning] ⚠️ 本页置信度：medium
-> 本机**没有 JUCE**。代码用本库 JUCE stub 做过 `-fsyntax-only` 检查（语法通过），
-> **但行为未验证**。API 细节需对照你的 JUCE 版本。
+> [!note] ✅ 已用 JUCE 8.0.4 官方示例核对（2026-10-16）
+> - **权威来源**：`examples/CMake/AudioPlugin/PluginEditor.cpp`（官方最简编辑器）
+> - **代码语法**：本库 JUCE stub 做过 `-fsyntax-only`（见 [[juce_stub 说明]]）
+>
+> ⚠️ **仍未实测**：本机缺 JUCE `modules/` 源码，**未真正编译过**。
 
 > [!important] 一句话
 > **JUCE 的 UI 只有一个基础类：`Component`。**
@@ -90,7 +92,41 @@ private:
 > 窗口大小变化、父组件变化 → JUCE 自动调用 `resized()`。
 > **你在这里决定每个子组件的位置。**
 
-**常用的布局写法**（伪代码，⚠️ 具体 API 需核实）：
+> [!important] ⭐ 官方示例的注释确认了这个职责划分
+> JUCE 8.0.4 `PluginEditor.cpp` 原文：
+> ```cpp
+> void AudioPluginAudioProcessorEditor::resized()
+> {
+>     // This is generally where you'll want to lay out the positions of any
+>     // subcomponents in your editor..
+> }
+> ```
+>
+> 而 `paint()` 的注释是：
+> ```cpp
+> // (Our component is opaque, so we must completely fill the background with a solid colour)
+> ```
+> → **`paint` 负责画背景，`resized` 负责摆位置。** 职责不重叠。
+
+**常用的布局写法**（✅ 官方示例里就有这个模式）：
+
+> [!important] ⭐ 官方真实用法（JUCE 8.0.4 `SurroundPluginDemo.h`）
+> ```cpp
+> void resized() override
+> {
+>     layoutName.setBounds (getLocalBounds().removeFromTop (20));
+> }
+> ```
+> 以及：
+> ```cpp
+> void resized() override
+> {
+>     auto b = getLocalBounds();
+>     layoutName.setBounds (b.removeFromBottom (20));
+> }
+> ```
+> **`getLocalBounds().removeFromTop/Bottom(...)` 是官方惯用法**，
+> 不是我的臆造。
 
 ```cpp
 void resized() override
@@ -176,6 +212,15 @@ private:
 > [!danger] 第 3 条是最常见的"什么都看不见"
 > `AudioProcessorEditor` 默认大小可能是 0×0。
 > **不调 `setSize()` → 窗口是空的**，而没有任何报错。
+
+> [!important] ⭐ 官方示例的注释直接确认了这一点
+> JUCE 8.0.4 `examples/CMake/AudioPlugin/PluginEditor.cpp` 原文：
+> ```cpp
+> // Make sure that before the constructor has finished, you've set the
+> // editor's size to whatever you need it to be.
+> setSize (400, 300);
+> ```
+> **"before the constructor has finished"** —— 构造函数结束前必须设好大小。
 
 ---
 

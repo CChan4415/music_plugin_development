@@ -14,6 +14,7 @@ updated: 2026-10-14
 | 目录 | 内容 |
 |---|---|
 | `books/` | 教材 |
+| `juce/` | [[10-Sources/juce/juce 归档说明|juce 归档说明]] — JUCE 8.0.4 官方 CMake API 与插件示例 |
 | `standards/` | 规范与权威公式集 |
 | `articles/` | 技术文章 |
 | `blogs/` | 博客系列 |

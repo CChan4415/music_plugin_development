@@ -20,6 +20,11 @@ from datetime import datetime, date
 
 VAULT = Path(__file__).resolve().parents[2]
 SKIP_DIRS = {'.git', '.obsidian', '.trash', 'node_modules'}
+
+# Obsidian 忽略所有点开头的目录，lint 也应如此。
+# 否则 .tools/（下载的 JUCE 源码）、.venv/（pip 装的 cmake）会被当成 vault 内容。
+def _is_hidden(part):
+    return part.startswith('.')
 REQUIRED_FM = ['title', 'type', 'status']
 WIKI_TYPES = {'wiki', 'note', 'source', 'decision', 'project', 'experiment'}
 STALE_DAYS = 120
@@ -41,7 +46,7 @@ FM_RE = re.compile(r'^---\s*\n(.*?)\n---\s*\n', re.S)
 
 def md_files():
     for p in VAULT.rglob('*.md'):
-        if any(part in SKIP_DIRS for part in p.parts):
+        if any(part in SKIP_DIRS or _is_hidden(part) for part in p.parts):
             continue
         yield p
 
